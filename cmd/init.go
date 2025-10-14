@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/node-pulse/agent/internal/installer"
 	"github.com/spf13/cobra"
 )
@@ -135,11 +136,17 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 }
 
 func runInteractive(existing *installer.ExistingInstall) error {
-	// For now, just use quick mode
-	// TODO: Implement full TUI mode
-	fmt.Println("📋 Interactive Setup")
-	fmt.Println()
-	return runQuickMode(existing)
+	// Run TUI wizard
+	p := tea.NewProgram(
+		newInitTUIModel(existing),
+		tea.WithAltScreen(),
+	)
+
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("failed to run TUI: %w", err)
+	}
+
+	return nil
 }
 
 func performInstallation(endpoint, serverID string) error {
