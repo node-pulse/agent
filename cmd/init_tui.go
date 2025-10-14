@@ -16,7 +16,8 @@ import (
 type Screen int
 
 const (
-	ScreenChecking Screen = iota // Initial permission and installation checks
+	ScreenSplash Screen = iota // ASCII logo splash screen
+	ScreenChecking             // Initial permission and installation checks
 	ScreenWelcome
 	ScreenEndpoint
 	ScreenServerID
@@ -46,6 +47,8 @@ type initTUIModel struct {
 	permissionError error
 }
 
+type splashCompleteMsg struct{}
+
 type checkStepMsg struct {
 	step     int
 	existing *installer.ExistingInstall
@@ -64,12 +67,12 @@ type installCompleteMsg struct {
 // newInitTUIModel creates a new TUI model
 func newInitTUIModel() initTUIModel {
 	ti := textinput.New()
-	ti.Placeholder = "https://api.nodepulse.io/metrics"
+	ti.Placeholder = "https://ingest.nodepulse.sh"
 	ti.Focus()
 	ti.Width = 60
 
 	return initTUIModel{
-		screen:    ScreenChecking,
+		screen:    ScreenSplash,
 		config:    installer.DefaultConfigOptions(),
 		textInput: ti,
 		checkingSteps: []string{
@@ -87,8 +90,11 @@ func newInitTUIModel() initTUIModel {
 }
 
 func (m initTUIModel) Init() tea.Cmd {
-	// Start with the first checking step
-	return m.runCheckStep(0)
+	// Start with splash screen for 1000ms
+	return func() tea.Msg {
+		time.Sleep(1000 * time.Millisecond)
+		return splashCompleteMsg{}
+	}
 }
 
 func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -117,6 +123,11 @@ func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
+	case splashCompleteMsg:
+		// Splash screen complete, move to checking
+		m.screen = ScreenChecking
+		return m, m.runCheckStep(0)
 
 	case checkStepMsg:
 		if msg.err != nil {
@@ -170,6 +181,8 @@ func (m initTUIModel) View() string {
 	}
 
 	switch m.screen {
+	case ScreenSplash:
+		return m.viewSplash()
 	case ScreenChecking:
 		return m.viewChecking()
 	case ScreenWelcome:
@@ -197,64 +210,124 @@ func (m initTUIModel) View() string {
 	}
 }
 
-func (m initTUIModel) viewChecking() string {
-	titleStyle := lipgloss.NewStyle().
+func (m initTUIModel) viewSplash() string {
+	logo := `
+███╗   ██╗ ██████╗ ██████╗ ███████╗
+████╗  ██║██╔═══██╗██╔══██╗██╔════╝
+██╔██╗ ██║██║   ██║██║  ██║█████╗
+██║╚██╗██║██║   ██║██║  ██║██╔══╝
+██║ ╚████║╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
+
+██████╗ ██╗   ██╗██╗     ███████╗███████╗
+██╔══██╗██║   ██║██║     ██╔════╝██╔════╝
+██████╔╝██║   ██║██║     ███████╗█████╗
+██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝
+██║     ╚██████╔╝███████╗███████║███████╗
+╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝
+`
+
+	logoStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.Accent).
 		Bold(true).
-		Foreground(themes.Current.Primary).
-		MarginBottom(1)
+		Align(lipgloss.Center)
+
+	taglineStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextPrimary).
+		Align(lipgloss.Center).
+		Italic(true).
+		MarginTop(2)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		logoStyle.Render(logo)+"\n"+taglineStyle.Render("Real-time server monitoring agent"),
+	)
+}
+
+func (m initTUIModel) viewChecking() string {
+	title := `
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║      ⚡ NodePulse Agent Initialization                     ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+`
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.Accent).
+		Bold(true).
+		MarginBottom(2)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⚡ NodePulse Agent Initialization"))
-	b.WriteString("\n\n")
+	b.WriteString(titleStyle.Render(title))
+	b.WriteString("\n")
 
 	for i, step := range m.checkingSteps {
+		var line string
 		if i < m.checkingStep {
 			// Completed
 			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
 			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
-			b.WriteString(checkStyle.Render("✓ ") + textStyle.Render(step) + "\n")
+			line = checkStyle.Render("✓ ") + textStyle.Render(step)
 		} else if i == m.checkingStep {
 			// In progress
 			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
 			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
-			b.WriteString(spinStyle.Render("⟳ ") + textStyle.Render(step+"...") + "\n")
+			line = spinStyle.Render("⟳ ") + textStyle.Render(step+"...")
 		} else {
 			// Pending
-			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextSecondary)
-			b.WriteString(pendingStyle.Render("○ " + step) + "\n")
+			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary).Faint(true)
+			line = pendingStyle.Render("○ " + step)
 		}
+		b.WriteString(contentStyle.Render(line) + "\n")
 	}
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewWelcome() string {
+	title := `
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║      ⚡ NodePulse Agent Initialization                    ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+`
+
 	titleStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.Accent).
 		Bold(true).
-		Foreground(themes.Current.Primary).
-		MarginBottom(1)
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary). // Bright gray/white
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⚡ NodePulse Agent Initialization"))
-	b.WriteString("\n\n")
+	b.WriteString(titleStyle.Render(title))
+	b.WriteString("\n")
 
-	b.WriteString(textStyle.Render("This wizard will help you set up the NodePulse agent."))
+	b.WriteString(contentStyle.Render(textStyle.Render("This wizard will help you set up the NodePulse agent.")))
+	b.WriteString("\n\n")
+	b.WriteString(contentStyle.Render(textStyle.Render("It will:")))
+	b.WriteString("\n\n")
+	b.WriteString(contentStyle.Render(textStyle.Render("  • Create necessary directories")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("It will:"))
+	b.WriteString(contentStyle.Render(textStyle.Render("  • Generate or use a server ID")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  • Create necessary directories"))
+	b.WriteString(contentStyle.Render(textStyle.Render("  • Create configuration file")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  • Generate or use a server ID"))
-	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  • Create configuration file"))
-	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  • Set proper permissions"))
+	b.WriteString(contentStyle.Render(textStyle.Render("  • Set proper permissions")))
 	b.WriteString("\n\n")
 
 	if m.existing != nil && (m.existing.HasConfig || m.existing.HasServerID) {
@@ -262,43 +335,44 @@ func (m initTUIModel) viewWelcome() string {
 			Foreground(themes.Current.Warning).
 			Bold(true)
 
-		b.WriteString(warningStyle.Render("⚠ Existing installation detected"))
+		b.WriteString(contentStyle.Render(warningStyle.Render("⚠ Existing installation detected")))
 		b.WriteString("\n\n")
 
 		if m.existing.HasConfig {
-			b.WriteString(textStyle.Render(fmt.Sprintf("  Config: %s", m.existing.ConfigPath)))
+			b.WriteString(contentStyle.Render(textStyle.Render(fmt.Sprintf("  Config: %s", m.existing.ConfigPath))))
 			b.WriteString("\n")
 		}
 		if m.existing.HasServerID {
-			b.WriteString(textStyle.Render(fmt.Sprintf("  Server ID: %s", strings.TrimSpace(m.existing.ServerID))))
+			b.WriteString(contentStyle.Render(textStyle.Render(fmt.Sprintf("  Server ID: %s", strings.TrimSpace(m.existing.ServerID)))))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
+		Foreground(themes.Current.TextPrimary).
 		Faint(true)
 
-	b.WriteString(helpStyle.Render("Press Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Press Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewEndpoint() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary). // Bright gray/white
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
@@ -306,43 +380,44 @@ func (m initTUIModel) viewEndpoint() string {
 	b.WriteString("\n\n")
 
 	if m.existing != nil && m.existing.Endpoint != "" {
-		b.WriteString(textStyle.Render("Edit the endpoint URL or press Enter to keep it:"))
+		b.WriteString(contentStyle.Render(textStyle.Render("Edit the endpoint URL or press Enter to keep it:")))
 	} else {
-		b.WriteString(textStyle.Render("Enter the metrics endpoint URL for your control server:"))
+		b.WriteString(contentStyle.Render(textStyle.Render("Enter the metrics endpoint URL for your control server:")))
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("Example: https://api.nodepulse.io/metrics"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Example: https://api.nodepulse.io/metrics")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewServerID() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary). // Bright gray/white
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
@@ -350,223 +425,231 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString("\n\n")
 
 	if m.existing != nil && m.existing.HasServerID {
-		b.WriteString(textStyle.Render("Edit the server ID or press Enter to keep it:"))
+		b.WriteString(contentStyle.Render(textStyle.Render("Edit the server ID or press Enter to keep it:")))
 	} else {
-		b.WriteString(textStyle.Render("Enter a server ID or leave empty to auto-generate UUID:"))
+		b.WriteString(contentStyle.Render(textStyle.Render("Enter a server ID or leave empty to auto-generate UUID:")))
 	}
 
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("Examples: prod-web-01, my-server, database-primary"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Examples: prod-web-01, my-server, database-primary")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("Format: letters, numbers, and dashes only"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Format: letters, numbers, and dashes only")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewInterval() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary).
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("⏱️  Metrics Collection Interval"))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("How often should metrics be collected?"))
+	b.WriteString(contentStyle.Render(textStyle.Render("How often should metrics be collected?")))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("Allowed values: 5s, 10s, 30s, 1m"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Allowed values: 5s, 10s, 30s, 1m")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewTimeout() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary).
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("⏰ HTTP Request Timeout"))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("Maximum time to wait for server response:"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Maximum time to wait for server response:")))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("Example: 3s (3 seconds)"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Example: 3s (3 seconds)")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewBuffer() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary).
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("💾 Local Buffer Configuration"))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("Enable local buffering of failed reports?"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Enable local buffering of failed reports?")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("(Failed reports will be stored locally and retried later)"))
+	b.WriteString(contentStyle.Render(textStyle.Render("(Failed reports will be stored locally and retried later)")))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("Recommended: yes"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Recommended: yes")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewLogging() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary).
-		Faint(true).
-		MarginTop(1)
+		Foreground(themes.Current.TextPrimary).
+		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("📝 Logging Configuration"))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("Set the logging level:"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Set the logging level:")))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.textInput.View())
+	b.WriteString(contentStyle.Render(m.textInput.View()))
 	b.WriteString("\n\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(textStyle.Render("debug: Verbose diagnostic information"))
+	b.WriteString(contentStyle.Render(textStyle.Render("debug: Verbose diagnostic information")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("info:  General informational messages (recommended)"))
+	b.WriteString(contentStyle.Render(textStyle.Render("info:  General informational messages (recommended)")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("warn:  Warning messages"))
+	b.WriteString(contentStyle.Render(textStyle.Render("warn:  Warning messages")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("error: Error messages only"))
+	b.WriteString(contentStyle.Render(textStyle.Render("error: Error messages only")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewReview() string {
 	titleStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.Accent).
 		Bold(true).
-		Foreground(themes.Current.Primary).
-		MarginBottom(1)
+		MarginBottom(2)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for labels
+		Foreground(themes.Current.TextPrimary).
+		Faint(true).
 		Width(18)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary) // Bright white
+		Foreground(themes.Current.TextPrimary)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(themes.Current.Border).
-		Padding(1, 2).
+		BorderForeground(themes.Current.Accent).
+		Padding(2, 3).
 		MarginTop(1).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
+		Foreground(themes.Current.TextPrimary).
 		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
@@ -587,19 +670,22 @@ func (m initTUIModel) viewReview() string {
 	summary.WriteString(labelStyle.Render("Logging:") + " " + valueStyle.Render(fmt.Sprintf("%s → %s", m.config.LogLevel, m.config.LogOutput)) + "\n")
 	summary.WriteString(labelStyle.Render("Config Path:") + " " + valueStyle.Render("/etc/node-pulse/nodepulse.yml"))
 
-	b.WriteString(boxStyle.Render(summary.String()))
+	b.WriteString(contentStyle.Render(boxStyle.Render(summary.String())))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Press Enter to install • Esc to cancel"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Press Enter to install • Esc to cancel")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewInstalling() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Accent).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
@@ -607,54 +693,59 @@ func (m initTUIModel) viewInstalling() string {
 	b.WriteString("\n\n")
 
 	for i, step := range m.installSteps {
+		var line string
 		if i < m.installStep {
 			// Completed
 			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
 			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
-			b.WriteString(checkStyle.Render("✓ ") + textStyle.Render(step) + "\n")
+			line = checkStyle.Render("✓ ") + textStyle.Render(step)
 		} else if i == m.installStep {
 			// In progress
 			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
 			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
-			b.WriteString(spinStyle.Render("⟳ ") + textStyle.Render(step+"...") + "\n")
+			line = spinStyle.Render("⟳ ") + textStyle.Render(step+"...")
 		} else {
 			// Pending
-			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextSecondary)
-			b.WriteString(pendingStyle.Render("○ " + step) + "\n")
+			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary).Faint(true)
+			line = pendingStyle.Render("○ " + step)
 		}
+		b.WriteString(contentStyle.Render(line) + "\n")
 	}
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) viewSuccess() string {
 	titleStyle := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(themes.Current.Success).
-		MarginBottom(1)
+		Bold(true).
+		MarginBottom(2)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary). // Bright gray/white
-		MarginBottom(1)
+		Foreground(themes.Current.TextPrimary)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for labels
+		Foreground(themes.Current.TextPrimary).
+		Faint(true).
 		Width(12)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary). // Bright white
+		Foreground(themes.Current.TextPrimary).
 		Bold(true)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(themes.Current.Success).
-		Padding(1, 2).
+		Padding(2, 3).
 		MarginTop(1).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
+		Foreground(themes.Current.TextPrimary).
 		Faint(true)
+
+	contentStyle := lipgloss.NewStyle().
+		Padding(0, 4)
 
 	var b strings.Builder
 
@@ -666,21 +757,21 @@ func (m initTUIModel) viewSuccess() string {
 	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.config.ServerID) + "\n")
 	summary.WriteString(labelStyle.Render("Config:") + " " + valueStyle.Render("/etc/node-pulse/nodepulse.yml"))
 
-	b.WriteString(boxStyle.Render(summary.String()))
+	b.WriteString(contentStyle.Render(boxStyle.Render(summary.String())))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("Next steps:"))
+	b.WriteString(contentStyle.Render(textStyle.Render("Next steps:")))
+	b.WriteString("\n\n")
+	b.WriteString(contentStyle.Render(textStyle.Render("  1. Start the agent:    pulse agent")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  1. Start the agent:    pulse agent"))
+	b.WriteString(contentStyle.Render(textStyle.Render("  2. View live metrics:  pulse view")))
 	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  2. View live metrics:  pulse view"))
-	b.WriteString("\n")
-	b.WriteString(textStyle.Render("  3. Install service:    sudo pulse service install"))
+	b.WriteString(contentStyle.Render(textStyle.Render("  3. Install service:    sudo pulse service install")))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Press any key to exit"))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Press any key to exit")))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
 func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
@@ -881,9 +972,6 @@ func (m initTUIModel) runCheckStep(step int) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 		var existing *installer.ExistingInstall
-
-		// Add a small delay to make the checking steps visible
-		time.Sleep(400 * time.Millisecond)
 
 		switch step {
 		case 0: // Check permissions
