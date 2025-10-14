@@ -259,7 +259,7 @@ func (m initTUIModel) viewChecking() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	contentStyle := lipgloss.NewStyle().
 		Padding(0, 4)
@@ -304,7 +304,7 @@ func (m initTUIModel) viewWelcome() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -362,7 +362,7 @@ func (m initTUIModel) viewEndpoint() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -407,7 +407,7 @@ func (m initTUIModel) viewServerID() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -455,7 +455,7 @@ func (m initTUIModel) viewInterval() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -496,7 +496,7 @@ func (m initTUIModel) viewTimeout() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -537,7 +537,7 @@ func (m initTUIModel) viewBuffer() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -580,7 +580,7 @@ func (m initTUIModel) viewLogging() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -627,7 +627,7 @@ func (m initTUIModel) viewReview() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	labelStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary).
@@ -641,7 +641,7 @@ func (m initTUIModel) viewReview() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(themes.Current.Accent).
 		Padding(2, 3).
-		MarginTop(1).
+		MarginTop(0).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
@@ -654,7 +654,7 @@ func (m initTUIModel) viewReview() string {
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("📋 Review Configuration"))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	// Configuration summary
 	var summary strings.Builder
@@ -682,7 +682,7 @@ func (m initTUIModel) viewInstalling() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Accent).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	contentStyle := lipgloss.NewStyle().
 		Padding(0, 4)
@@ -719,7 +719,7 @@ func (m initTUIModel) viewSuccess() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.Success).
 		Bold(true).
-		MarginBottom(2)
+		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(themes.Current.TextPrimary)
@@ -737,7 +737,7 @@ func (m initTUIModel) viewSuccess() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(themes.Current.Success).
 		Padding(2, 3).
-		MarginTop(1).
+		MarginTop(0).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
@@ -749,8 +749,8 @@ func (m initTUIModel) viewSuccess() string {
 
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("✓ NodePulse agent initialized successfully!"))
-	b.WriteString("\n\n")
+	b.WriteString(titleStyle.Render("✓ Node Pulse agent initialized successfully!"))
+	b.WriteString("\n")
 
 	// Summary box
 	var summary strings.Builder
