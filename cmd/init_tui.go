@@ -90,9 +90,9 @@ func newInitTUIModel() initTUIModel {
 }
 
 func (m initTUIModel) Init() tea.Cmd {
-	// Start with splash screen for 1000ms
+	// Start with splash screen for 1500ms
 	return func() tea.Msg {
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(1500 * time.Millisecond)
 		return splashCompleteMsg{}
 	}
 }
