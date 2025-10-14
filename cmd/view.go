@@ -414,6 +414,7 @@ func (m model) renderAgentInfo() string {
 
 	content.WriteString(renderStatLine("Endpoint", endpoint))
 	content.WriteString(renderStatLine("Interval", m.cfg.Agent.Interval.String()))
+	content.WriteString(renderStatLine("Timeout", m.cfg.Server.Timeout.String()))
 
 	runningTime := time.Since(m.stats.StartTime)
 	content.WriteString(renderStatLine("Running", formatDuration(runningTime)))
