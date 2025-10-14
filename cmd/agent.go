@@ -80,16 +80,24 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 func collectAndSend(sender *report.Sender) error {
 	// Collect metrics
-	report, err := metrics.Collect()
+	metricsReport, err := metrics.Collect()
 	if err != nil {
 		return fmt.Errorf("failed to collect metrics: %w", err)
 	}
 
+	// Record collection in stats
+	stats := metrics.GetGlobalStats()
+	stats.RecordCollection(metricsReport)
+
 	// Send report
-	if err := sender.Send(report); err != nil {
+	if err := sender.Send(metricsReport); err != nil {
+		// Record failure
+		stats.RecordFailure()
 		return fmt.Errorf("failed to send report: %w", err)
 	}
 
+	// Record success
+	stats.RecordSuccess()
 	log.Println("Report sent successfully")
 	return nil
 }

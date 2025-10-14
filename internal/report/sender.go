@@ -134,3 +134,11 @@ func (s *Sender) Close() error {
 	}
 	return nil
 }
+
+// GetBufferStatus returns the current buffer status
+func (s *Sender) GetBufferStatus() BufferStatus {
+	if s == nil || s.buffer == nil {
+		return BufferStatus{}
+	}
+	return s.buffer.GetBufferStatus()
+}
