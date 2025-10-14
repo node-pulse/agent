@@ -83,17 +83,30 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 	fmt.Println()
 
 	// Prompt for endpoint
-	endpoint, err := promptString("Enter endpoint URL", "", func(s string) error {
-		if s == "" {
+	defaultEndpoint := ""
+	endpointPrompt := "Enter endpoint URL"
+	if existing.Endpoint != "" {
+		defaultEndpoint = strings.TrimSpace(existing.Endpoint)
+		endpointPrompt = fmt.Sprintf("Enter endpoint URL (leave empty to keep existing: %s)", defaultEndpoint)
+	}
+
+	endpoint, err := promptString(endpointPrompt, "", func(s string) error {
+		if s == "" && defaultEndpoint == "" {
 			return fmt.Errorf("endpoint is required")
 		}
-		if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		if s != "" && !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
 			return fmt.Errorf("endpoint must start with http:// or https://")
 		}
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+
+	// Use existing endpoint if user pressed Enter
+	if endpoint == "" && defaultEndpoint != "" {
+		endpoint = defaultEndpoint
+		fmt.Printf("Using existing endpoint: %s\n", endpoint)
 	}
 
 	// Prompt for server ID
