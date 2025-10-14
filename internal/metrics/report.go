@@ -8,16 +8,18 @@ import (
 
 // Report represents the complete metrics report sent to the server
 type Report struct {
-	Timestamp string          `json:"timestamp"`
-	Hostname  string          `json:"hostname"`
-	CPU       *CPUMetrics     `json:"cpu"`
-	Memory    *MemoryMetrics  `json:"memory"`
-	Network   *NetworkMetrics `json:"network"`
-	Uptime    *UptimeMetrics  `json:"uptime"`
+	Timestamp  string          `json:"timestamp"`
+	ServerID   string          `json:"server_id"`
+	Hostname   string          `json:"hostname"`
+	SystemInfo *SystemInfo     `json:"system_info,omitempty"`
+	CPU        *CPUMetrics     `json:"cpu"`
+	Memory     *MemoryMetrics  `json:"memory"`
+	Network    *NetworkMetrics `json:"network"`
+	Uptime     *UptimeMetrics  `json:"uptime"`
 }
 
 // Collect gathers all metrics and creates a complete report
-func Collect() (*Report, error) {
+func Collect(serverID string) (*Report, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
@@ -25,7 +27,13 @@ func Collect() (*Report, error) {
 
 	report := &Report{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		ServerID:  serverID,
 		Hostname:  hostname,
+	}
+
+	// Collect system info (cached after first call)
+	if sysInfo, err := CollectSystemInfo(); err == nil {
+		report.SystemInfo = sysInfo
 	}
 
 	// Collect each metric independently

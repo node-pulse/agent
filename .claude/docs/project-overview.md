@@ -64,6 +64,27 @@ agent/
 - Format: JSON
 - Timeout: **3 seconds** (default)
 - If timeout or failure → save to buffer
+- Every report includes a `server_id` (UUID) to identify the server
+
+### Server ID (UUID)
+
+Each agent instance requires a unique `server_id` to identify which server is reporting.
+
+**Auto-generation behavior:**
+1. If config has valid UUID (not placeholder) → Use it
+2. If persisted file exists → Load it
+3. Otherwise → Generate new UUID and save to persistent file
+
+**Persistence locations** (tried in order):
+- `/var/lib/node-pulse/server_id` ✅ (survives re-init, not OS reinstall)
+- `/etc/node-pulse/server_id`
+- `~/.node-pulse/server_id`
+- `./server_id` (fallback)
+
+**Stability:**
+- UUID persists across project re-initialization
+- UUID is regenerated only after OS reinstall (when persistent file is wiped)
+- Check current UUID: `pulse current-server`
 
 ### Buffer Strategy (Hourly JSONL Files)
 
@@ -121,6 +142,7 @@ buffer:
 ```bash
 pulse agent                  # Run agent in foreground (for testing)
 pulse view                   # Launch TUI to see live metrics (Bubbletea)
+pulse current-server         # Display current server ID and its location
 ```
 
 ### Service Management (No systemd knowledge required)

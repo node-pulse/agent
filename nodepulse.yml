@@ -10,6 +10,12 @@ server:
   timeout: 3s
 
 agent:
+  # Unique server ID (UUID format)
+  # If not set or left as placeholder, a UUID will be auto-generated on first run
+  # and saved to /var/lib/node-pulse/server_id for persistence
+  # You can also manually set one: uuidgen (Linux/Mac) or New-Guid (PowerShell)
+  server_id: "00000000-0000-0000-0000-000000000000"
+
   # Metrics collection interval
   # Allowed values: 5s, 10s, 30s, 1m
   interval: 5s

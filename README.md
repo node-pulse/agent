@@ -49,13 +49,22 @@ server:
   timeout: 3s
 
 agent:
-  interval: 5s # Options: 5s, 10s, 30s, 1m
+  server_id: "your-unique-uuid-here"  # Required: UUID to identify this server
+  interval: 5s                         # Options: 5s, 10s, 30s, 1m
 
 buffer:
   enabled: true
   path: "/var/lib/node-pulse/buffer"
   retention_hours: 48
 ```
+
+**Server ID Generation**:
+- If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
+- The generated UUID is saved to `/var/lib/node-pulse/server_id` (or similar location)
+- The same UUID will be reused on subsequent runs
+- You can also manually set a UUID in the config if you prefer:
+  - Linux/Mac: `uuidgen`
+  - PowerShell: `New-Guid`
 
 Or use the included `nodepulse.yml` as a template:
 
@@ -80,6 +89,20 @@ pulse view
 ```
 
 Press `q` to quit the live view.
+
+### Check Current Server ID
+
+```bash
+pulse current-server
+```
+
+Shows the UUID that identifies this server and where it's persisted.
+
+**Example output:**
+```
+Server ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Persisted at: /var/lib/node-pulse/server_id
+```
 
 ### Service Management
 
@@ -121,6 +144,16 @@ sudo pulse service uninstall
 
 ## Metrics Collected
 
+### System Information (Static)
+
+- Hostname
+- Kernel name and version (from `/proc/version`)
+- Linux distribution and version (from `/etc/os-release`)
+- Architecture (amd64, arm64)
+- CPU core count
+
+**Note**: System info is collected once at startup and cached (doesn't change).
+
 ### CPU
 
 - Usage percentage (calculated from `/proc/stat`)
@@ -146,7 +179,17 @@ sudo pulse service uninstall
 ```json
 {
   "timestamp": "2025-10-13T14:30:00Z",
+  "server_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "hostname": "server-01",
+  "system_info": {
+    "hostname": "server-01",
+    "kernel": "Linux",
+    "kernel_version": "5.15.0-89-generic",
+    "distro": "Ubuntu",
+    "distro_version": "22.04.3 LTS (Jammy Jellyfish)",
+    "architecture": "amd64",
+    "cpu_cores": 8
+  },
   "cpu": {
     "usage_percent": 45.2
   },
@@ -164,6 +207,8 @@ sudo pulse service uninstall
   }
 }
 ```
+
+**Note**: `system_info` is collected once at startup and cached. It contains static system information that doesn't change during runtime.
 
 If a metric fails to collect, it will be `null`:
 

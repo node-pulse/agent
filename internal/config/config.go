@@ -24,6 +24,7 @@ type ServerConfig struct {
 
 // AgentConfig represents agent behavior settings
 type AgentConfig struct {
+	ServerID string        `mapstructure:"server_id"`
 	Interval time.Duration `mapstructure:"interval"`
 }
 
@@ -83,6 +84,11 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Ensure server ID exists (auto-generate if needed)
+	if err := EnsureServerID(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to ensure server ID: %w", err)
+	}
+
 	// Validate config
 	if err := validate(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -109,6 +115,15 @@ func validate(cfg *Config) error {
 
 	if cfg.Server.Timeout <= 0 {
 		return fmt.Errorf("server.timeout must be positive")
+	}
+
+	// Validate server_id is a valid UUID format
+	// Note: EnsureServerID() should have already set this
+	if cfg.Agent.ServerID == "" {
+		return fmt.Errorf("agent.server_id is missing (this should not happen)")
+	}
+	if !isValidUUID(cfg.Agent.ServerID) {
+		return fmt.Errorf("agent.server_id must be a valid UUID format")
 	}
 
 	if cfg.Agent.Interval <= 0 {
@@ -144,6 +159,26 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// isValidUUID checks if a string is a valid UUID format
+func isValidUUID(u string) bool {
+	// Basic UUID validation: 8-4-4-4-12 format
+	if len(u) != 36 {
+		return false
+	}
+	if u[8] != '-' || u[13] != '-' || u[18] != '-' || u[23] != '-' {
+		return false
+	}
+	for i, c := range u {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsureBufferDir creates the buffer directory if it doesn't exist

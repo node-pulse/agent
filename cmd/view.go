@@ -74,6 +74,7 @@ type model struct {
 	width        int
 	height       int
 	quitting     bool
+	serverID     string
 }
 
 func initialModel(cfg *config.Config, sender *report.Sender) model {
@@ -96,13 +97,14 @@ func initialModel(cfg *config.Config, sender *report.Sender) model {
 		memProgress: memProg,
 		width:       80,
 		height:      24,
+		serverID:    cfg.Agent.ServerID,
 	}
 }
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tickCmd(m.cfg.Agent.Interval),
-		collectMetrics(),
+		collectMetrics(m.serverID),
 	)
 }
 
@@ -119,12 +121,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "r":
-			return m, collectMetrics()
+			return m, collectMetrics(m.serverID)
 		}
 
 	case tickMsg:
 		return m, tea.Batch(
-			collectMetrics(),
+			collectMetrics(m.serverID),
 			tickCmd(m.cfg.Agent.Interval),
 		)
 
@@ -395,15 +397,23 @@ func (m model) renderAgentInfo() string {
 		Render("⚙️  Agent Info")
 	content.WriteString(header + "\n\n")
 
+	// System info
+	if m.report != nil && m.report.SystemInfo != nil {
+		sys := m.report.SystemInfo
+		content.WriteString(renderStatLine("Distro", fmt.Sprintf("%s %s", sys.Distro, sys.DistroVer)))
+		content.WriteString(renderStatLine("Kernel", sys.KernelVer))
+		content.WriteString(renderStatLine("Arch", fmt.Sprintf("%s (%d cores)", sys.Architecture, sys.CPUCores)))
+		content.WriteString("\n")
+	}
+
 	// Truncate endpoint if too long
 	endpoint := m.cfg.Server.Endpoint
-	if len(endpoint) > 35 {
-		endpoint = endpoint[:32] + "..."
+	if len(endpoint) > 30 {
+		endpoint = endpoint[:27] + "..."
 	}
 
 	content.WriteString(renderStatLine("Endpoint", endpoint))
 	content.WriteString(renderStatLine("Interval", m.cfg.Agent.Interval.String()))
-	content.WriteString(renderStatLine("Timeout", m.cfg.Server.Timeout.String()))
 
 	runningTime := time.Since(m.stats.StartTime)
 	content.WriteString(renderStatLine("Running", formatDuration(runningTime)))
@@ -480,9 +490,9 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
-func collectMetrics() tea.Cmd {
+func collectMetrics(serverID string) tea.Cmd {
 	return func() tea.Msg {
-		report, err := metrics.Collect()
+		report, err := metrics.Collect(serverID)
 		if err != nil {
 			return err
 		}

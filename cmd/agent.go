@@ -58,10 +58,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	ticker := time.NewTicker(cfg.Agent.Interval)
 	defer ticker.Stop()
 
-	log.Printf("Agent started (interval: %s, endpoint: %s)\n", cfg.Agent.Interval, cfg.Server.Endpoint)
+	log.Printf("Agent started (server_id: %s, interval: %s, endpoint: %s)\n",
+		cfg.Agent.ServerID, cfg.Agent.Interval, cfg.Server.Endpoint)
 
 	// Collect and send immediately on start
-	if err := collectAndSend(sender); err != nil {
+	if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
 		log.Printf("Error: %v\n", err)
 	}
 
@@ -71,16 +72,16 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := collectAndSend(sender); err != nil {
+			if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
 				log.Printf("Error: %v\n", err)
 			}
 		}
 	}
 }
 
-func collectAndSend(sender *report.Sender) error {
+func collectAndSend(sender *report.Sender, serverID string) error {
 	// Collect metrics
-	metricsReport, err := metrics.Collect()
+	metricsReport, err := metrics.Collect(serverID)
 	if err != nil {
 		return fmt.Errorf("failed to collect metrics: %w", err)
 	}
