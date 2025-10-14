@@ -2,7 +2,7 @@
 
 server:
   # The endpoint to send metrics to
-  endpoint: "https://api.nodepulse.io/metrics"
+  endpoint: "https://ingest.dogfooding.nodepulse.sh"
 
   # HTTP request timeout
   # If the server doesn't respond within this time, the request fails
