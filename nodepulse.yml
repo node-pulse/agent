@@ -31,3 +31,34 @@ buffer:
   # How long to keep buffered reports (in hours)
   # Files older than this are automatically deleted
   retention_hours: 48
+
+logging:
+  # Log level: debug, info, warn, error
+  # debug: Verbose diagnostic information for troubleshooting
+  # info: General informational messages about normal operation
+  # warn: Potentially harmful situations that don't prevent operation
+  # error: Error events that might still allow operation to continue
+  level: "info"
+
+  # Log output destination: stdout, file, both
+  # stdout: Output to console/terminal
+  # file: Write to log file with rotation
+  # both: Output to both console and file
+  output: "stdout"
+
+  # File logging configuration (used when output is "file" or "both")
+  file:
+    # Path to the log file
+    path: "/var/log/node-pulse/agent.log"
+
+    # Maximum size in MB before rotating
+    max_size_mb: 10
+
+    # Maximum number of old log files to keep
+    max_backups: 3
+
+    # Maximum number of days to keep old log files
+    max_age_days: 7
+
+    # Compress rotated log files with gzip
+    compress: true

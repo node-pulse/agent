@@ -3,13 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/node-pulse/agent/internal/config"
+	"github.com/node-pulse/agent/internal/logger"
 	"github.com/node-pulse/agent/internal/metrics"
 	"github.com/node-pulse/agent/internal/report"
 	"github.com/spf13/cobra"
@@ -34,6 +34,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Initialize logger
+	if err := logger.Initialize(cfg.Logging); err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer logger.Sync()
+
 	// Create report sender
 	sender, err := report.NewSender(cfg)
 	if err != nil {
@@ -50,7 +56,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		<-sigChan
-		log.Println("Shutting down agent...")
+		logger.Info("Shutting down agent...")
 		cancel()
 	}()
 
@@ -58,12 +64,14 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	ticker := time.NewTicker(cfg.Agent.Interval)
 	defer ticker.Stop()
 
-	log.Printf("Agent started (server_id: %s, interval: %s, endpoint: %s)\n",
-		cfg.Agent.ServerID, cfg.Agent.Interval, cfg.Server.Endpoint)
+	logger.Info("Agent started",
+		logger.String("server_id", cfg.Agent.ServerID),
+		logger.Duration("interval", cfg.Agent.Interval),
+		logger.String("endpoint", cfg.Server.Endpoint))
 
 	// Collect and send immediately on start
 	if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-		log.Printf("Error: %v\n", err)
+		logger.Error("Collection and send failed", logger.Err(err))
 	}
 
 	// Then continue with ticker
@@ -73,7 +81,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			return nil
 		case <-ticker.C:
 			if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-				log.Printf("Error: %v\n", err)
+				logger.Error("Collection and send failed", logger.Err(err))
 			}
 		}
 	}
@@ -99,6 +107,6 @@ func collectAndSend(sender *report.Sender, serverID string) error {
 
 	// Record success
 	stats.RecordSuccess()
-	log.Println("Report sent successfully")
+	logger.Info("Report sent successfully")
 	return nil
 }

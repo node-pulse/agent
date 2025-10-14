@@ -6,14 +6,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/node-pulse/agent/internal/logger"
 	"github.com/spf13/viper"
 )
 
 // Config represents the application configuration
 type Config struct {
-	Server ServerConfig `mapstructure:"server"`
-	Agent  AgentConfig  `mapstructure:"agent"`
-	Buffer BufferConfig `mapstructure:"buffer"`
+	Server  ServerConfig  `mapstructure:"server"`
+	Agent   AgentConfig   `mapstructure:"agent"`
+	Buffer  BufferConfig  `mapstructure:"buffer"`
+	Logging logger.Config `mapstructure:"logging"`
 }
 
 // ServerConfig represents server connection settings
@@ -48,6 +50,17 @@ var (
 			Enabled:        true,
 			Path:           "/var/lib/node-pulse/buffer",
 			RetentionHours: 48,
+		},
+		Logging: logger.Config{
+			Level:  "info",
+			Output: "stdout",
+			File: logger.FileConfig{
+				Path:       "/var/log/node-pulse/agent.log",
+				MaxSizeMB:  10,
+				MaxBackups: 3,
+				MaxAgeDays: 7,
+				Compress:   true,
+			},
 		},
 	}
 )
@@ -105,6 +118,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("buffer.enabled", defaultConfig.Buffer.Enabled)
 	v.SetDefault("buffer.path", defaultConfig.Buffer.Path)
 	v.SetDefault("buffer.retention_hours", defaultConfig.Buffer.RetentionHours)
+	v.SetDefault("logging.level", defaultConfig.Logging.Level)
+	v.SetDefault("logging.output", defaultConfig.Logging.Output)
+	v.SetDefault("logging.file.path", defaultConfig.Logging.File.Path)
+	v.SetDefault("logging.file.max_size_mb", defaultConfig.Logging.File.MaxSizeMB)
+	v.SetDefault("logging.file.max_backups", defaultConfig.Logging.File.MaxBackups)
+	v.SetDefault("logging.file.max_age_days", defaultConfig.Logging.File.MaxAgeDays)
+	v.SetDefault("logging.file.compress", defaultConfig.Logging.File.Compress)
 }
 
 // validate validates the configuration
