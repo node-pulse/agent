@@ -87,7 +87,8 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 	endpointPrompt := "Enter endpoint URL"
 	if existing.Endpoint != "" {
 		defaultEndpoint = strings.TrimSpace(existing.Endpoint)
-		endpointPrompt = fmt.Sprintf("Enter endpoint URL (leave empty to keep existing: %s)", defaultEndpoint)
+		fmt.Printf("Existing endpoint: %s\n", defaultEndpoint)
+		endpointPrompt = "Enter endpoint URL (leave empty to keep existing)"
 	}
 
 	endpoint, err := promptString(endpointPrompt, "", func(s string) error {
@@ -106,7 +107,7 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 	// Use existing endpoint if user pressed Enter
 	if endpoint == "" && defaultEndpoint != "" {
 		endpoint = defaultEndpoint
-		fmt.Printf("Using existing endpoint: %s\n", endpoint)
+		fmt.Println("Keeping existing endpoint")
 	}
 
 	// Prompt for server ID
@@ -114,7 +115,8 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 	serverIDPrompt := "Enter server ID (leave empty to auto-generate UUID)"
 	if existing.HasServerID {
 		defaultServerID = strings.TrimSpace(existing.ServerID)
-		serverIDPrompt = fmt.Sprintf("Enter server ID (leave empty to keep existing: %s)", defaultServerID)
+		fmt.Printf("Existing server ID: %s\n", defaultServerID)
+		serverIDPrompt = "Enter server ID (leave empty to keep existing)"
 	}
 
 	serverID, err := promptString(serverIDPrompt, "", func(s string) error {
@@ -132,7 +134,7 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 	if serverID == "" {
 		if existing.HasServerID {
 			finalServerID = defaultServerID
-			fmt.Printf("Using existing server ID: %s\n", finalServerID)
+			fmt.Println("Keeping existing server ID")
 		} else {
 			fmt.Print("Generating server ID... ")
 			finalServerID, err = installer.HandleServerID("")
@@ -144,7 +146,7 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 		}
 	} else {
 		finalServerID = serverID
-		fmt.Printf("Using server ID: %s\n", finalServerID)
+		fmt.Println("Server ID set")
 	}
 
 	// Create config options with defaults
@@ -164,7 +166,8 @@ func runInteractive() error {
 	)
 
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("failed to run TUI: %w", err)
+		fmt.Println("TUI error:")
+		return err
 	}
 
 	return nil
@@ -219,8 +222,10 @@ func performInstallation(opts installer.ConfigOptions) error {
 	fmt.Println()
 	fmt.Println("✓ NodePulse agent initialized successfully!")
 	fmt.Println()
-	fmt.Printf("Server ID:  %s\n", opts.ServerID)
-	fmt.Printf("Config:     %s\n", installer.DefaultConfigPath)
+	fmt.Println("Server ID:")
+	fmt.Printf("  %s\n", opts.ServerID)
+	fmt.Println("Config:")
+	fmt.Printf("  %s\n", installer.DefaultConfigPath)
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Start the agent:    pulse agent")
@@ -249,7 +254,8 @@ func performInstallation(opts installer.ConfigOptions) error {
 		}
 
 		if err := installCmd.RunE(installCmd, []string{}); err != nil {
-			fmt.Printf("Failed to install service: %v\n", err)
+			fmt.Println("Failed to install service:")
+			fmt.Printf("  %v\n", err)
 		}
 	}
 
@@ -269,7 +275,8 @@ func promptString(prompt, defaultVal string, validate func(string) error) (strin
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			return "", fmt.Errorf("failed to read input: %w", err)
+			fmt.Println("Failed to read input:")
+			return "", err
 		}
 
 		input = strings.TrimSpace(input)
