@@ -1,0 +1,39 @@
+# Binaries
+pulse
+pulse-*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Distribution / Build
+dist/
+build/
+
+# Buffer directory (for local testing)
+buffer/
+/var/lib/node-pulse/
+
+# Config files (keep template only)
+/etc/node-pulse/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
