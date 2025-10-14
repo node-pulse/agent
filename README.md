@@ -1,6 +1,11 @@
 # NodePulse Agent
 
-A lightweight Linux server monitoring agent that collects and reports system metrics including CPU, memory, network I/O, and uptime.
+A lightweight, self-contained monitoring agent written in Go. It collects system metrics (CPU, memory, network I/O, and uptime) and reports them to your NodePulse control server via HTTP.
+
+**Lightweight & Efficient:**
+- Single binary, <15 MB
+- <40 MB RAM usage
+- Real-time metrics with configurable intervals (5s to 1m)
 
 ## Features
 
