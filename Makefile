@@ -1,4 +1,4 @@
-.PHONY: build clean test install dev release
+.PHONY: build clean test install dev release fmt lint deps help push
 
 # Binary name
 BINARY_NAME=pulse
@@ -72,3 +72,8 @@ help:
 	@echo "  lint             - Lint code"
 	@echo "  deps             - Download and tidy dependencies"
 	@echo "  help             - Show this help message"
+
+
+push:
+	git push origin main && \
+	git push --tags
