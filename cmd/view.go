@@ -8,23 +8,15 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/node-pulse/agent/cmd/themes"
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/metrics"
 	"github.com/node-pulse/agent/internal/report"
 	"github.com/spf13/cobra"
 )
 
-// Color palette
-var (
-	primaryColor   = lipgloss.Color("#7C3AED") // Purple
-	successColor   = lipgloss.Color("#10B981") // Green
-	warningColor   = lipgloss.Color("#F59E0B") // Orange
-	errorColor     = lipgloss.Color("#EF4444") // Red
-	accentColor    = lipgloss.Color("#06B6D4") // Cyan
-	mutedColor     = lipgloss.Color("#6B7280") // Gray
-	bgColor        = lipgloss.Color("#1F2937") // Dark bg
-	borderColor    = lipgloss.Color("#374151") // Border
-)
+// Get theme for easy access
+var theme = themes.Current
 
 // viewCmd represents the view command
 var viewCmd = &cobra.Command{
@@ -79,13 +71,13 @@ type model struct {
 
 func initialModel(cfg *config.Config, sender *report.Sender) model {
 	cpuProg := progress.New(
-		progress.WithGradient(string(warningColor), string(errorColor)),
+		progress.WithGradient(string(theme.Warning), string(theme.Error)),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
 
 	memProg := progress.New(
-		progress.WithGradient(string(accentColor), string(primaryColor)),
+		progress.WithGradient(string(theme.Accent), string(theme.Primary)),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
@@ -150,7 +142,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	if m.quitting {
 		return lipgloss.NewStyle().
-			Foreground(successColor).
+			Foreground(theme.Success).
 			Bold(true).
 			Render("✓ Dashboard closed\n")
 	}
@@ -162,8 +154,8 @@ func (m model) renderDashboard() string {
 	// Title
 	title := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(primaryColor).
-		Background(bgColor).
+		Foreground(theme.Primary).
+		Background(theme.Background).
 		Padding(0, 2).
 		MarginBottom(1).
 		Render("⚡ NodePulse Agent Dashboard")
@@ -172,18 +164,18 @@ func (m model) renderDashboard() string {
 	if m.err != nil {
 		errorBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(errorColor).
+			BorderForeground(theme.Error).
 			Padding(1, 2).
 			Width(m.width - 4).
 			Render(lipgloss.NewStyle().
-				Foreground(errorColor).
+				Foreground(theme.Error).
 				Render(fmt.Sprintf("✗ Error: %v", m.err)))
 		return lipgloss.JoinVertical(lipgloss.Left, title, errorBox, m.renderFooter())
 	}
 
 	if m.report == nil {
 		loading := lipgloss.NewStyle().
-			Foreground(accentColor).
+			Foreground(theme.Accent).
 			Render("⟳ Collecting metrics...")
 		return lipgloss.JoinVertical(lipgloss.Left, title, loading, m.renderFooter())
 	}
@@ -233,7 +225,7 @@ func (m model) renderCurrentMetrics() string {
 	// Create styled box
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+		BorderForeground(theme.Border).
 		Padding(1, 2).
 		Width(m.width - 4)
 
@@ -242,12 +234,12 @@ func (m model) renderCurrentMetrics() string {
 	// Section title
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(accentColor).
+		Foreground(theme.Accent).
 		Render("📊 Current Metrics")
 	content.WriteString(header + "\n\n")
 
 	// Hostname and timestamp
-	metaStyle := lipgloss.NewStyle().Foreground(mutedColor)
+	metaStyle := lipgloss.NewStyle().Foreground(theme.TextMuted)
 	content.WriteString(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render("Host: ") +
 			lipgloss.NewStyle().Bold(true).Render(r.Hostname) +
@@ -282,7 +274,7 @@ func (m model) renderCurrentMetrics() string {
 		content.WriteString(
 			lipgloss.NewStyle().Foreground(memColor).Bold(true).Render(memLabel) +
 				"  " + memBar +
-				lipgloss.NewStyle().Foreground(mutedColor).Render(memInfo) + "\n",
+				lipgloss.NewStyle().Foreground(theme.TextMuted).Render(memInfo) + "\n",
 		)
 	} else {
 		content.WriteString(renderErrorLine("MEM", "Failed to collect"))
@@ -292,8 +284,8 @@ func (m model) renderCurrentMetrics() string {
 
 	// Network
 	if r.Network != nil {
-		upIcon := lipgloss.NewStyle().Foreground(successColor).Render("↑")
-		downIcon := lipgloss.NewStyle().Foreground(accentColor).Render("↓")
+		upIcon := lipgloss.NewStyle().Foreground(theme.Success).Render("↑")
+		downIcon := lipgloss.NewStyle().Foreground(theme.Accent).Render("↓")
 		content.WriteString(fmt.Sprintf("%s Upload   %s\n", upIcon, formatBytes(r.Network.UploadBytes)))
 		content.WriteString(fmt.Sprintf("%s Download %s\n", downIcon, formatBytes(r.Network.DownloadBytes)))
 	} else {
@@ -302,7 +294,7 @@ func (m model) renderCurrentMetrics() string {
 
 	// Uptime
 	if r.Uptime != nil {
-		uptimeIcon := lipgloss.NewStyle().Foreground(primaryColor).Render("⏱")
+		uptimeIcon := lipgloss.NewStyle().Foreground(theme.Primary).Render("⏱")
 		content.WriteString(fmt.Sprintf("\n%s Uptime   %.1f days", uptimeIcon, r.Uptime.Days))
 	}
 
@@ -312,7 +304,7 @@ func (m model) renderCurrentMetrics() string {
 func (m model) renderHourlyStats() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+		BorderForeground(theme.Border).
 		Padding(1, 2).
 		Width(m.width - 4)
 
@@ -322,7 +314,7 @@ func (m model) renderHourlyStats() string {
 	hour := time.Now().Format("15:00")
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(successColor).
+		Foreground(theme.Success).
 		Render(fmt.Sprintf("📈 Current Hour Stats (%s)", hour))
 	content.WriteString(header + "\n\n")
 
@@ -344,7 +336,7 @@ func (m model) renderHourlyStats() string {
 		content.WriteString(renderStatLine("Total Download", formatBytes(stats.TotalDownload)))
 	} else {
 		content.WriteString(lipgloss.NewStyle().
-			Foreground(mutedColor).
+			Foreground(theme.TextMuted).
 			Render("No data collected this hour yet"))
 	}
 
@@ -354,7 +346,7 @@ func (m model) renderHourlyStats() string {
 func (m model) renderBufferStatus() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+		BorderForeground(theme.Border).
 		Padding(1, 2).
 		Width((m.width / 2) - 3)
 
@@ -362,13 +354,13 @@ func (m model) renderBufferStatus() string {
 
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(warningColor).
+		Foreground(theme.Warning).
 		Render("💾 Buffer Status")
 	content.WriteString(header + "\n\n")
 
 	if !m.bufferStatus.HasBuffered {
 		content.WriteString(lipgloss.NewStyle().
-			Foreground(successColor).
+			Foreground(theme.Success).
 			Render("✓ No buffered reports"))
 	} else {
 		content.WriteString(renderStatLine("Buffered Files", fmt.Sprintf("%d", m.bufferStatus.FileCount)))
@@ -385,7 +377,7 @@ func (m model) renderBufferStatus() string {
 func (m model) renderAgentInfo() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+		BorderForeground(theme.Border).
 		Padding(1, 2).
 		Width((m.width / 2) - 3)
 
@@ -393,7 +385,7 @@ func (m model) renderAgentInfo() string {
 
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(primaryColor).
+		Foreground(theme.Primary).
 		Render("⚙️  Agent Info")
 	content.WriteString(header + "\n\n")
 
@@ -423,7 +415,7 @@ func (m model) renderAgentInfo() string {
 }
 
 func (m model) renderFooter() string {
-	keys := lipgloss.NewStyle().Foreground(mutedColor).Render(
+	keys := lipgloss.NewStyle().Foreground(theme.TextMuted).Render(
 		"[q] quit • [r] refresh • Updates every " + m.cfg.Agent.Interval.String(),
 	)
 	return keys
@@ -433,7 +425,7 @@ func (m model) renderFooter() string {
 
 func renderStatLine(label, value string) string {
 	labelStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(theme.TextMuted).
 		Width(16)
 	valueStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#E5E7EB"))
@@ -442,17 +434,17 @@ func renderStatLine(label, value string) string {
 
 func renderErrorLine(label, message string) string {
 	return lipgloss.NewStyle().
-		Foreground(errorColor).
+		Foreground(theme.Error).
 		Render(fmt.Sprintf("%s: %s\n", label, message))
 }
 
 func getPercentColor(percent float64) lipgloss.Color {
 	if percent < 60 {
-		return successColor
+		return theme.Success
 	} else if percent < 80 {
-		return warningColor
+		return theme.Warning
 	}
-	return errorColor
+	return theme.Error
 }
 
 func formatBytes(bytes uint64) string {

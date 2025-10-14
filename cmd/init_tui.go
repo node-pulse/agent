@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/node-pulse/agent/cmd/themes"
 	"github.com/node-pulse/agent/internal/installer"
 )
 
@@ -24,18 +25,17 @@ const (
 
 // initTUIModel represents the state of the TUI wizard
 type initTUIModel struct {
-	screen         Screen
-	width          int
-	height         int
-	existing       *installer.ExistingInstall
-	endpoint       string
-	serverID       string
-	useExistingID  bool
-	textInput      textinput.Model
-	err            error
-	installStep    int
-	installSteps   []string
-	quitting       bool
+	screen       Screen
+	width        int
+	height       int
+	existing     *installer.ExistingInstall
+	endpoint     string
+	serverID     string
+	textInput    textinput.Model
+	err          error
+	installStep  int
+	installSteps []string
+	quitting     bool
 }
 
 type installStepMsg struct {
@@ -125,7 +125,7 @@ func (m initTUIModel) View() string {
 	if m.quitting {
 		if m.err != nil {
 			return lipgloss.NewStyle().
-				Foreground(errorColor).
+				Foreground(themes.Current.Error).
 				Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 		}
 		return ""
@@ -152,11 +152,11 @@ func (m initTUIModel) View() string {
 func (m initTUIModel) viewWelcome() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(primaryColor).
+		Foreground(themes.Current.Primary).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextPrimary). // Bright gray/white
 		MarginBottom(1)
 
 	var b strings.Builder
@@ -179,7 +179,7 @@ func (m initTUIModel) viewWelcome() string {
 
 	if m.existing.HasConfig || m.existing.HasServerID {
 		warningStyle := lipgloss.NewStyle().
-			Foreground(warningColor).
+			Foreground(themes.Current.Warning).
 			Bold(true)
 
 		b.WriteString(warningStyle.Render("⚠ Existing installation detected"))
@@ -197,7 +197,7 @@ func (m initTUIModel) viewWelcome() string {
 	}
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
 		Faint(true)
 
 	b.WriteString(helpStyle.Render("Press Enter to continue • Esc to exit"))
@@ -208,15 +208,15 @@ func (m initTUIModel) viewWelcome() string {
 func (m initTUIModel) viewEndpoint() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(accentColor).
+		Foreground(themes.Current.Accent).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextPrimary). // Bright gray/white
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
 		Faint(true).
 		MarginTop(1)
 
@@ -232,7 +232,7 @@ func (m initTUIModel) viewEndpoint() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(errorColor)
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
 		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
 		b.WriteString("\n\n")
 	}
@@ -248,15 +248,15 @@ func (m initTUIModel) viewEndpoint() string {
 func (m initTUIModel) viewServerID() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(accentColor).
+		Foreground(themes.Current.Accent).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextPrimary). // Bright gray/white
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
 		Faint(true).
 		MarginTop(1)
 
@@ -279,7 +279,7 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(errorColor)
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
 		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
 		b.WriteString("\n\n")
 	}
@@ -297,25 +297,25 @@ func (m initTUIModel) viewServerID() string {
 func (m initTUIModel) viewReview() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(primaryColor).
+		Foreground(themes.Current.Primary).
 		MarginBottom(1)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for labels
 		Width(18)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB"))
+		Foreground(themes.Current.TextPrimary) // Bright white
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+		BorderForeground(themes.Current.Border).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
 		Faint(true)
 
 	var b strings.Builder
@@ -343,7 +343,7 @@ func (m initTUIModel) viewReview() string {
 func (m initTUIModel) viewInstalling() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(accentColor).
+		Foreground(themes.Current.Accent).
 		MarginBottom(1)
 
 	var b strings.Builder
@@ -354,16 +354,18 @@ func (m initTUIModel) viewInstalling() string {
 	for i, step := range m.installSteps {
 		if i < m.installStep {
 			// Completed
-			checkStyle := lipgloss.NewStyle().Foreground(successColor)
-			b.WriteString(checkStyle.Render("✓ ") + step + "\n")
+			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
+			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			b.WriteString(checkStyle.Render("✓ ") + textStyle.Render(step) + "\n")
 		} else if i == m.installStep {
 			// In progress
-			spinStyle := lipgloss.NewStyle().Foreground(accentColor)
-			b.WriteString(spinStyle.Render("⟳ ") + step + "...\n")
+			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
+			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			b.WriteString(spinStyle.Render("⟳ ") + textStyle.Render(step+"...") + "\n")
 		} else {
 			// Pending
-			pendingStyle := lipgloss.NewStyle().Foreground(mutedColor)
-			b.WriteString(pendingStyle.Render("○ ") + step + "\n")
+			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextSecondary)
+			b.WriteString(pendingStyle.Render("○ " + step) + "\n")
 		}
 	}
 
@@ -373,30 +375,30 @@ func (m initTUIModel) viewInstalling() string {
 func (m initTUIModel) viewSuccess() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(successColor).
+		Foreground(themes.Current.Success).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextPrimary). // Bright gray/white
 		MarginBottom(1)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for labels
 		Width(12)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB")).
+		Foreground(themes.Current.TextPrimary). // Bright white
 		Bold(true)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(successColor).
+		BorderForeground(themes.Current.Success).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(themes.Current.TextSecondary). // Lighter gray for help text
 		Faint(true)
 
 	var b strings.Builder
