@@ -29,6 +29,7 @@ type ExistingInstall struct {
 	HasServerID bool
 	ServerID    string
 	ConfigPath  string
+	Endpoint    string // Existing endpoint from config file
 }
 
 // CheckPermissions verifies the user has sufficient permissions
@@ -70,6 +71,11 @@ func DetectExisting() (*ExistingInstall, error) {
 	// Check for existing config
 	if _, err := os.Stat(DefaultConfigPath); err == nil {
 		existing.HasConfig = true
+
+		// Try to read the endpoint from existing config
+		if cfg, err := config.Load(DefaultConfigPath); err == nil {
+			existing.Endpoint = cfg.Server.Endpoint
+		}
 	}
 
 	// Check for existing server_id

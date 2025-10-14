@@ -225,7 +225,11 @@ func (m initTUIModel) viewEndpoint() string {
 	b.WriteString(titleStyle.Render("📡 Endpoint Configuration"))
 	b.WriteString("\n\n")
 
-	b.WriteString(textStyle.Render("Enter the metrics endpoint URL for your control server:"))
+	if m.existing.Endpoint != "" {
+		b.WriteString(textStyle.Render("Edit the endpoint URL or press Enter to keep it:"))
+	} else {
+		b.WriteString(textStyle.Render("Enter the metrics endpoint URL for your control server:"))
+	}
 	b.WriteString("\n\n")
 
 	b.WriteString(m.textInput.View())
@@ -266,9 +270,7 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString("\n\n")
 
 	if m.existing.HasServerID {
-		b.WriteString(textStyle.Render(fmt.Sprintf("Found existing server ID: %s", strings.TrimSpace(m.existing.ServerID))))
-		b.WriteString("\n\n")
-		b.WriteString(textStyle.Render("Enter a new server ID or leave empty to keep existing:"))
+		b.WriteString(textStyle.Render("Edit the server ID or press Enter to keep it:"))
 	} else {
 		b.WriteString(textStyle.Render("Enter a server ID or leave empty to auto-generate UUID:"))
 	}
@@ -434,7 +436,12 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 		// Move to endpoint screen
 		m.screen = ScreenEndpoint
 		m.textInput.Placeholder = "https://api.nodepulse.io/metrics"
-		m.textInput.SetValue("")
+		// Pre-populate with existing endpoint if available
+		if m.existing.Endpoint != "" {
+			m.textInput.SetValue(m.existing.Endpoint)
+		} else {
+			m.textInput.SetValue("")
+		}
 		m.textInput.Focus()
 		m.err = nil
 		return m, textinput.Blink
@@ -456,13 +463,14 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 
 		// Move to server ID screen
 		m.screen = ScreenServerID
-		m.textInput.Placeholder = ""
 		if m.existing.HasServerID {
-			m.textInput.Placeholder = "Leave empty to keep: " + strings.TrimSpace(m.existing.ServerID)
+			m.textInput.Placeholder = "Leave empty to auto-generate UUID"
+			// Pre-populate with existing server ID
+			m.textInput.SetValue(strings.TrimSpace(m.existing.ServerID))
 		} else {
 			m.textInput.Placeholder = "Leave empty to auto-generate UUID"
+			m.textInput.SetValue("")
 		}
-		m.textInput.SetValue("")
 		m.textInput.Focus()
 		return m, textinput.Blink
 
