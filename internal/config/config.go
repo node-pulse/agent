@@ -117,13 +117,13 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("server.timeout must be positive")
 	}
 
-	// Validate server_id is a valid UUID format
+	// Validate server_id format
 	// Note: EnsureServerID() should have already set this
 	if cfg.Agent.ServerID == "" {
 		return fmt.Errorf("agent.server_id is missing (this should not happen)")
 	}
-	if !isValidUUID(cfg.Agent.ServerID) {
-		return fmt.Errorf("agent.server_id must be a valid UUID format")
+	if !isValidServerID(cfg.Agent.ServerID) {
+		return fmt.Errorf("agent.server_id must contain only letters, numbers, and dashes, and must start and end with a letter or number")
 	}
 
 	if cfg.Agent.Interval <= 0 {
@@ -161,24 +161,42 @@ func validate(cfg *Config) error {
 	return nil
 }
 
-// isValidUUID checks if a string is a valid UUID format
-func isValidUUID(u string) bool {
-	// Basic UUID validation: 8-4-4-4-12 format
-	if len(u) != 36 {
+// isValidServerID checks if a string is a valid server ID format
+// Pattern: ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$
+// Must start and end with alphanumeric, can contain dashes in middle
+func isValidServerID(id string) bool {
+	if len(id) == 0 {
 		return false
 	}
-	if u[8] != '-' || u[13] != '-' || u[18] != '-' || u[23] != '-' {
+
+	// Single character - must be alphanumeric
+	if len(id) == 1 {
+		return isAlphanumeric(rune(id[0]))
+	}
+
+	// Check first character: must be alphanumeric
+	if !isAlphanumeric(rune(id[0])) {
 		return false
 	}
-	for i, c := range u {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			continue
-		}
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+
+	// Check last character: must be alphanumeric
+	if !isAlphanumeric(rune(id[len(id)-1])) {
+		return false
+	}
+
+	// Check all characters: only alphanumeric and dash allowed
+	for _, c := range id {
+		if !isAlphanumeric(c) && c != '-' {
 			return false
 		}
 	}
+
 	return true
+}
+
+// isAlphanumeric checks if a character is alphanumeric
+func isAlphanumeric(c rune) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // EnsureBufferDir creates the buffer directory if it doesn't exist

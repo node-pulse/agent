@@ -1,0 +1,298 @@
+package cmd
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/node-pulse/agent/internal/installer"
+	"github.com/spf13/cobra"
+)
+
+var (
+	quickMode bool
+)
+
+// initCmd represents the init command
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize NodePulse agent configuration",
+	Long: `Initialize the NodePulse agent by creating necessary directories,
+generating server ID, and creating configuration file.
+
+Run interactively with the full setup wizard, or use --yes for quick mode
+with minimal prompts.`,
+	RunE: runInit,
+}
+
+func init() {
+	rootCmd.AddCommand(initCmd)
+	initCmd.Flags().BoolVarP(&quickMode, "yes", "y", false, "Quick mode - minimal prompts, use defaults")
+}
+
+func runInit(cmd *cobra.Command, args []string) error {
+	fmt.Println("⚡ NodePulse Agent Initialization")
+	fmt.Println()
+
+	// Check permissions
+	fmt.Print("Checking permissions... ")
+	if err := installer.CheckPermissions(); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Detect existing installation
+	existing, err := installer.DetectExisting()
+	if err != nil {
+		return fmt.Errorf("failed to detect existing installation: %w", err)
+	}
+
+	// Handle existing installation
+	if existing.HasConfig || existing.HasServerID {
+		fmt.Println("\n⚠ Existing installation detected")
+		if existing.HasConfig {
+			fmt.Printf("  Config: %s\n", existing.ConfigPath)
+		}
+		if existing.HasServerID {
+			fmt.Printf("  Server ID: %s\n", strings.TrimSpace(existing.ServerID))
+		}
+		fmt.Println()
+
+		if !promptYesNo("Continue and update configuration?", true) {
+			fmt.Println("\nInstallation cancelled")
+			return nil
+		}
+		fmt.Println()
+	}
+
+	// Run appropriate mode
+	if quickMode {
+		return runQuickMode(existing)
+	}
+	return runInteractive(existing)
+}
+
+func runQuickMode(existing *installer.ExistingInstall) error {
+	fmt.Println("🚀 Quick Mode Setup")
+	fmt.Println()
+
+	// Prompt for endpoint
+	endpoint, err := promptString("Enter endpoint URL", "", func(s string) error {
+		if s == "" {
+			return fmt.Errorf("endpoint is required")
+		}
+		if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+			return fmt.Errorf("endpoint must start with http:// or https://")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Prompt for server ID
+	defaultServerID := ""
+	serverIDPrompt := "Enter server ID (leave empty to auto-generate UUID)"
+	if existing.HasServerID {
+		defaultServerID = strings.TrimSpace(existing.ServerID)
+		serverIDPrompt = fmt.Sprintf("Enter server ID (leave empty to keep existing: %s)", defaultServerID)
+	}
+
+	serverID, err := promptString(serverIDPrompt, "", func(s string) error {
+		if s == "" {
+			return nil // Empty is OK, will auto-generate or use existing
+		}
+		return installer.ValidateServerID(s)
+	})
+	if err != nil {
+		return err
+	}
+
+	// Handle server ID
+	var finalServerID string
+	if serverID == "" {
+		if existing.HasServerID {
+			finalServerID = defaultServerID
+			fmt.Printf("Using existing server ID: %s\n", finalServerID)
+		} else {
+			fmt.Print("Generating server ID... ")
+			finalServerID, err = installer.HandleServerID("")
+			if err != nil {
+				fmt.Println("✗")
+				return err
+			}
+			fmt.Printf("✓\n  %s\n", finalServerID)
+		}
+	} else {
+		finalServerID = serverID
+		fmt.Printf("Using server ID: %s\n", finalServerID)
+	}
+
+	// Perform installation
+	return performInstallation(endpoint, finalServerID)
+}
+
+func runInteractive(existing *installer.ExistingInstall) error {
+	// For now, just use quick mode
+	// TODO: Implement full TUI mode
+	fmt.Println("📋 Interactive Setup")
+	fmt.Println()
+	return runQuickMode(existing)
+}
+
+func performInstallation(endpoint, serverID string) error {
+	fmt.Println()
+	fmt.Println("Installing...")
+	fmt.Println()
+
+	// Create directories
+	fmt.Print("Creating directories... ")
+	if err := installer.CreateDirectories(); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Persist server ID
+	fmt.Print("Persisting server ID... ")
+	if err := installer.PersistServerID(serverID); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Write config file
+	fmt.Print("Writing configuration file... ")
+	if err := installer.WriteConfigFile(endpoint, serverID); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Fix permissions
+	fmt.Print("Setting permissions... ")
+	if err := installer.FixPermissions(); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Validate installation
+	fmt.Print("Validating installation... ")
+	if err := installer.ValidateInstallation(); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+	fmt.Println("✓")
+
+	// Success
+	fmt.Println()
+	fmt.Println("✓ NodePulse agent initialized successfully!")
+	fmt.Println()
+	fmt.Printf("Server ID:  %s\n", serverID)
+	fmt.Printf("Config:     %s\n", installer.DefaultConfigPath)
+	fmt.Println()
+	fmt.Println("Next steps:")
+	fmt.Println("  1. Start the agent:    pulse agent")
+	fmt.Println("  2. View live metrics:  pulse view")
+	fmt.Println("  3. Install service:    sudo pulse service install")
+	fmt.Println()
+
+	// Ask about service installation
+	if promptYesNo("Install as systemd service now?", false) {
+		fmt.Println()
+		// Run service install command
+		serviceCmd := rootCmd.Commands()[0] // Get first command (should be service)
+		for _, cmd := range rootCmd.Commands() {
+			if cmd.Name() == "service" {
+				serviceCmd = cmd
+				break
+			}
+		}
+
+		installCmd := serviceCmd.Commands()[0]
+		for _, cmd := range serviceCmd.Commands() {
+			if cmd.Name() == "install" {
+				installCmd = cmd
+				break
+			}
+		}
+
+		if err := installCmd.RunE(installCmd, []string{}); err != nil {
+			fmt.Printf("Failed to install service: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
+// promptString prompts for a string input with validation
+func promptString(prompt, defaultVal string, validate func(string) error) (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		if defaultVal != "" {
+			fmt.Printf("%s [%s]: ", prompt, defaultVal)
+		} else {
+			fmt.Printf("%s: ", prompt)
+		}
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+
+		input = strings.TrimSpace(input)
+
+		// Use default if empty and default exists
+		if input == "" && defaultVal != "" {
+			input = defaultVal
+		}
+
+		// Validate
+		if validate != nil {
+			if err := validate(input); err != nil {
+				fmt.Printf("❌ %v\n", err)
+				continue
+			}
+		}
+
+		return input, nil
+	}
+}
+
+// promptYesNo prompts for a yes/no answer
+func promptYesNo(prompt string, defaultYes bool) bool {
+	reader := bufio.NewReader(os.Stdin)
+
+	suffix := " [y/N]: "
+	if defaultYes {
+		suffix = " [Y/n]: "
+	}
+
+	for {
+		fmt.Print(prompt + suffix)
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return defaultYes
+		}
+
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		if input == "" {
+			return defaultYes
+		}
+
+		if input == "y" || input == "yes" {
+			return true
+		}
+		if input == "n" || input == "no" {
+			return false
+		}
+
+		fmt.Println("Please enter 'y' or 'n'")
+	}
+}

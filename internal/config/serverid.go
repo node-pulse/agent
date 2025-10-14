@@ -15,20 +15,20 @@ const (
 
 // EnsureServerID ensures a server ID exists, generating one if needed
 // Priority:
-// 1. Config file value (if valid UUID)
+// 1. Config file value (if valid)
 // 2. Persisted file value
 // 3. Auto-generate new UUID and persist it
 func EnsureServerID(cfg *Config) error {
-	// If config has a valid UUID that's not the placeholder, use it
+	// If config has a valid server ID that's not the placeholder, use it
 	if cfg.Agent.ServerID != "" && cfg.Agent.ServerID != "00000000-0000-0000-0000-000000000000" {
-		if isValidUUID(cfg.Agent.ServerID) {
+		if isValidServerID(cfg.Agent.ServerID) {
 			return nil
 		}
 	}
 
 	// Try to load from persisted file
 	serverIDPath := GetServerIDPath()
-	if persistedID, err := loadServerID(serverIDPath); err == nil && isValidUUID(persistedID) {
+	if persistedID, err := loadServerID(serverIDPath); err == nil && isValidServerID(persistedID) {
 		cfg.Agent.ServerID = persistedID
 		return nil
 	}
@@ -78,8 +78,8 @@ func loadServerID(path string) (string, error) {
 	}
 
 	id := strings.TrimSpace(string(data))
-	if !isValidUUID(id) {
-		return "", fmt.Errorf("invalid UUID in server_id file")
+	if !isValidServerID(id) {
+		return "", fmt.Errorf("invalid server ID format in file")
 	}
 
 	return id, nil
@@ -97,8 +97,8 @@ func saveServerID(path string, id string) error {
 	return os.WriteFile(path, []byte(id+"\n"), 0600)
 }
 
-// generateUUID generates a new UUID v4
-func generateUUID() (string, error) {
+// GenerateUUID generates a new UUID v4
+func GenerateUUID() (string, error) {
 	uuid := make([]byte, 16)
 	if _, err := rand.Read(uuid); err != nil {
 		return "", err
@@ -116,6 +116,11 @@ func generateUUID() (string, error) {
 		hex.EncodeToString(uuid[8:10]),
 		hex.EncodeToString(uuid[10:16]),
 	), nil
+}
+
+// generateUUID is an internal alias for GenerateUUID (for backwards compatibility)
+func generateUUID() (string, error) {
+	return GenerateUUID()
 }
 
 // isWritable checks if a directory is writable
