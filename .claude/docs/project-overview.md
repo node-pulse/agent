@@ -155,10 +155,22 @@ WantedBy=multi-user.target
 ## Build & Release
 
 ### Build Targets
-- `pulse-linux-amd64`
-- `pulse-linux-arm64`
+- Binaries output to `build/` directory (manual builds)
+- Binaries output to `dist/` directory (goreleaser)
 
-### Using GoReleaser
+### Using Makefile
+```bash
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-all
+
+# Build release with goreleaser
+make release
+```
+
+### Using GoReleaser directly
 ```bash
 goreleaser release --snapshot --clean
 ```

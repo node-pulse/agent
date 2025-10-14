@@ -189,10 +189,16 @@ When HTTP reporting fails (timeout or error):
 
 ## Building
 
-### Build for current platform
+### Using Makefile (Recommended)
 
 ```bash
-go build -o pulse
+# Build for current platform
+make build
+
+# Build for all Linux platforms (amd64 + arm64)
+make build-all
+
+# Binaries will be in build/ directory
 ```
 
 ### Build for all platforms using GoReleaser
@@ -202,19 +208,25 @@ go build -o pulse
 go install github.com/goreleaser/goreleaser/v2@latest
 
 # Build snapshot (for testing)
-goreleaser release --snapshot --clean
+make release
 
-# Binaries will be in dist/
+# Binaries will be in dist/ directory
 ```
 
-### Manual cross-compilation
+### Manual compilation
 
 ```bash
-# For amd64
-GOOS=linux GOARCH=amd64 go build -o pulse-linux-amd64
+# For current platform (outputs to build/)
+make build
 
-# For arm64
-GOOS=linux GOARCH=arm64 go build -o pulse-linux-arm64
+# Or using go directly
+go build -o build/pulse .
+
+# For Linux amd64
+make build-linux-amd64
+
+# For Linux arm64
+make build-linux-arm64
 ```
 
 ## Requirements
@@ -258,18 +270,18 @@ agent/
 The agent needs to run on a Linux system to collect metrics. You can test locally:
 
 ```bash
-# Run in foreground
+# Run directly with go
 go run . agent
 
 # Or build and run
-go build -o pulse
-./pulse agent
+make build
+./build/pulse agent
 ```
 
 View metrics in another terminal:
 
 ```bash
-./pulse view
+./build/pulse view
 ```
 
 ## License
