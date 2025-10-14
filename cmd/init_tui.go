@@ -15,9 +15,14 @@ import (
 type Screen int
 
 const (
-	ScreenWelcome Screen = iota
+	ScreenChecking Screen = iota // Initial permission and installation checks
+	ScreenWelcome
 	ScreenEndpoint
 	ScreenServerID
+	ScreenInterval
+	ScreenTimeout
+	ScreenBuffer
+	ScreenLogging
 	ScreenReview
 	ScreenInstalling
 	ScreenSuccess
@@ -25,17 +30,25 @@ const (
 
 // initTUIModel represents the state of the TUI wizard
 type initTUIModel struct {
-	screen       Screen
-	width        int
-	height       int
-	existing     *installer.ExistingInstall
-	endpoint     string
-	serverID     string
-	textInput    textinput.Model
-	err          error
-	installStep  int
-	installSteps []string
-	quitting     bool
+	screen          Screen
+	width           int
+	height          int
+	existing        *installer.ExistingInstall
+	config          installer.ConfigOptions
+	textInput       textinput.Model
+	err             error
+	installStep     int
+	installSteps    []string
+	checkingStep    int // 0=permissions, 1=existing, 2=done
+	checkingSteps   []string
+	quitting        bool
+	permissionError error
+}
+
+type checkStepMsg struct {
+	step     int
+	existing *installer.ExistingInstall
+	err      error
 }
 
 type installStepMsg struct {
@@ -44,22 +57,25 @@ type installStepMsg struct {
 }
 
 type installCompleteMsg struct {
-	serverID string
+	config installer.ConfigOptions
 }
 
 // newInitTUIModel creates a new TUI model
-func newInitTUIModel(existing *installer.ExistingInstall) initTUIModel {
+func newInitTUIModel() initTUIModel {
 	ti := textinput.New()
 	ti.Placeholder = "https://api.nodepulse.io/metrics"
 	ti.Focus()
 	ti.Width = 60
 
 	return initTUIModel{
-		screen:    ScreenWelcome,
-		existing:  existing,
+		screen:    ScreenChecking,
+		config:    installer.DefaultConfigOptions(),
 		textInput: ti,
-		installSteps: []string{
+		checkingSteps: []string{
 			"Checking permissions",
+			"Detecting existing installation",
+		},
+		installSteps: []string{
 			"Creating directories",
 			"Persisting server ID",
 			"Writing configuration file",
@@ -70,7 +86,8 @@ func newInitTUIModel(existing *installer.ExistingInstall) initTUIModel {
 }
 
 func (m initTUIModel) Init() tea.Cmd {
-	return textinput.Blink
+	// Start with the first checking step
+	return m.runCheckStep(0)
 }
 
 func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -98,6 +115,24 @@ func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	case checkStepMsg:
+		if msg.err != nil {
+			m.permissionError = msg.err
+			m.err = msg.err
+			m.quitting = true
+			return m, tea.Quit
+		}
+		m.checkingStep = msg.step
+		if msg.existing != nil {
+			m.existing = msg.existing
+		}
+		if msg.step < len(m.checkingSteps) {
+			return m, m.runCheckStep(msg.step)
+		}
+		// Checking complete, move to welcome screen
+		m.screen = ScreenWelcome
+		return m, textinput.Blink
+
 	case installStepMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -110,7 +145,7 @@ func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Installation complete
 		return m, func() tea.Msg {
-			return installCompleteMsg{serverID: m.serverID}
+			return installCompleteMsg{config: m.config}
 		}
 
 	case installCompleteMsg:
@@ -132,12 +167,22 @@ func (m initTUIModel) View() string {
 	}
 
 	switch m.screen {
+	case ScreenChecking:
+		return m.viewChecking()
 	case ScreenWelcome:
 		return m.viewWelcome()
 	case ScreenEndpoint:
 		return m.viewEndpoint()
 	case ScreenServerID:
 		return m.viewServerID()
+	case ScreenInterval:
+		return m.viewInterval()
+	case ScreenTimeout:
+		return m.viewTimeout()
+	case ScreenBuffer:
+		return m.viewBuffer()
+	case ScreenLogging:
+		return m.viewLogging()
 	case ScreenReview:
 		return m.viewReview()
 	case ScreenInstalling:
@@ -147,6 +192,38 @@ func (m initTUIModel) View() string {
 	default:
 		return ""
 	}
+}
+
+func (m initTUIModel) viewChecking() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(themes.Current.Primary).
+		MarginBottom(1)
+
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("⚡ NodePulse Agent Initialization"))
+	b.WriteString("\n\n")
+
+	for i, step := range m.checkingSteps {
+		if i < m.checkingStep {
+			// Completed
+			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
+			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			b.WriteString(checkStyle.Render("✓ ") + textStyle.Render(step) + "\n")
+		} else if i == m.checkingStep {
+			// In progress
+			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
+			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			b.WriteString(spinStyle.Render("⟳ ") + textStyle.Render(step+"...") + "\n")
+		} else {
+			// Pending
+			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextSecondary)
+			b.WriteString(pendingStyle.Render("○ " + step) + "\n")
+		}
+	}
+
+	return b.String()
 }
 
 func (m initTUIModel) viewWelcome() string {
@@ -177,7 +254,7 @@ func (m initTUIModel) viewWelcome() string {
 	b.WriteString(textStyle.Render("  • Set proper permissions"))
 	b.WriteString("\n\n")
 
-	if m.existing.HasConfig || m.existing.HasServerID {
+	if m.existing != nil && (m.existing.HasConfig || m.existing.HasServerID) {
 		warningStyle := lipgloss.NewStyle().
 			Foreground(themes.Current.Warning).
 			Bold(true)
@@ -225,7 +302,7 @@ func (m initTUIModel) viewEndpoint() string {
 	b.WriteString(titleStyle.Render("📡 Endpoint Configuration"))
 	b.WriteString("\n\n")
 
-	if m.existing.Endpoint != "" {
+	if m.existing != nil && m.existing.Endpoint != "" {
 		b.WriteString(textStyle.Render("Edit the endpoint URL or press Enter to keep it:"))
 	} else {
 		b.WriteString(textStyle.Render("Enter the metrics endpoint URL for your control server:"))
@@ -269,7 +346,7 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString(titleStyle.Render("🔑 Server ID Configuration"))
 	b.WriteString("\n\n")
 
-	if m.existing.HasServerID {
+	if m.existing != nil && m.existing.HasServerID {
 		b.WriteString(textStyle.Render("Edit the server ID or press Enter to keep it:"))
 	} else {
 		b.WriteString(textStyle.Render("Enter a server ID or leave empty to auto-generate UUID:"))
@@ -289,6 +366,174 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString(textStyle.Render("Examples: prod-web-01, my-server, database-primary"))
 	b.WriteString("\n")
 	b.WriteString(textStyle.Render("Format: letters, numbers, and dashes only"))
+	b.WriteString("\n\n")
+
+	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+
+	return b.String()
+}
+
+func (m initTUIModel) viewInterval() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(themes.Current.Accent).
+		MarginBottom(1)
+
+	textStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextPrimary).
+		MarginBottom(1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextSecondary).
+		Faint(true).
+		MarginTop(1)
+
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("⏱️  Metrics Collection Interval"))
+	b.WriteString("\n\n")
+
+	b.WriteString(textStyle.Render("How often should metrics be collected?"))
+	b.WriteString("\n\n")
+
+	b.WriteString(m.textInput.View())
+	b.WriteString("\n\n")
+
+	if m.err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(textStyle.Render("Allowed values: 5s, 10s, 30s, 1m"))
+	b.WriteString("\n\n")
+
+	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+
+	return b.String()
+}
+
+func (m initTUIModel) viewTimeout() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(themes.Current.Accent).
+		MarginBottom(1)
+
+	textStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextPrimary).
+		MarginBottom(1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextSecondary).
+		Faint(true).
+		MarginTop(1)
+
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("⏰ HTTP Request Timeout"))
+	b.WriteString("\n\n")
+
+	b.WriteString(textStyle.Render("Maximum time to wait for server response:"))
+	b.WriteString("\n\n")
+
+	b.WriteString(m.textInput.View())
+	b.WriteString("\n\n")
+
+	if m.err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(textStyle.Render("Example: 3s (3 seconds)"))
+	b.WriteString("\n\n")
+
+	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+
+	return b.String()
+}
+
+func (m initTUIModel) viewBuffer() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(themes.Current.Accent).
+		MarginBottom(1)
+
+	textStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextPrimary).
+		MarginBottom(1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextSecondary).
+		Faint(true).
+		MarginTop(1)
+
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("💾 Local Buffer Configuration"))
+	b.WriteString("\n\n")
+
+	b.WriteString(textStyle.Render("Enable local buffering of failed reports?"))
+	b.WriteString("\n")
+	b.WriteString(textStyle.Render("(Failed reports will be stored locally and retried later)"))
+	b.WriteString("\n\n")
+
+	b.WriteString(m.textInput.View())
+	b.WriteString("\n\n")
+
+	if m.err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(textStyle.Render("Recommended: yes"))
+	b.WriteString("\n\n")
+
+	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
+
+	return b.String()
+}
+
+func (m initTUIModel) viewLogging() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(themes.Current.Accent).
+		MarginBottom(1)
+
+	textStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextPrimary).
+		MarginBottom(1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(themes.Current.TextSecondary).
+		Faint(true).
+		MarginTop(1)
+
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("📝 Logging Configuration"))
+	b.WriteString("\n\n")
+
+	b.WriteString(textStyle.Render("Set the logging level:"))
+	b.WriteString("\n\n")
+
+	b.WriteString(m.textInput.View())
+	b.WriteString("\n\n")
+
+	if m.err != nil {
+		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		b.WriteString(errorStyle.Render(fmt.Sprintf("❌ %v", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(textStyle.Render("debug: Verbose diagnostic information"))
+	b.WriteString("\n")
+	b.WriteString(textStyle.Render("info:  General informational messages (recommended)"))
+	b.WriteString("\n")
+	b.WriteString(textStyle.Render("warn:  Warning messages"))
+	b.WriteString("\n")
+	b.WriteString(textStyle.Render("error: Error messages only"))
 	b.WriteString("\n\n")
 
 	b.WriteString(helpStyle.Render("Enter to continue • Esc to exit"))
@@ -327,11 +572,16 @@ func (m initTUIModel) viewReview() string {
 
 	// Configuration summary
 	var summary strings.Builder
-	summary.WriteString(labelStyle.Render("Endpoint:") + " " + valueStyle.Render(m.endpoint) + "\n")
-	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.serverID) + "\n")
-	summary.WriteString(labelStyle.Render("Interval:") + " " + valueStyle.Render("5s") + "\n")
-	summary.WriteString(labelStyle.Render("Timeout:") + " " + valueStyle.Render("3s") + "\n")
-	summary.WriteString(labelStyle.Render("Buffer:") + " " + valueStyle.Render("Enabled (48h retention)") + "\n")
+	summary.WriteString(labelStyle.Render("Endpoint:") + " " + valueStyle.Render(m.config.Endpoint) + "\n")
+	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.config.ServerID) + "\n")
+	summary.WriteString(labelStyle.Render("Interval:") + " " + valueStyle.Render(m.config.Interval) + "\n")
+	summary.WriteString(labelStyle.Render("Timeout:") + " " + valueStyle.Render(m.config.Timeout) + "\n")
+	bufferStatus := "Disabled"
+	if m.config.BufferEnabled {
+		bufferStatus = fmt.Sprintf("Enabled (%dh retention)", m.config.BufferRetentionHours)
+	}
+	summary.WriteString(labelStyle.Render("Buffer:") + " " + valueStyle.Render(bufferStatus) + "\n")
+	summary.WriteString(labelStyle.Render("Logging:") + " " + valueStyle.Render(fmt.Sprintf("%s → %s", m.config.LogLevel, m.config.LogOutput)) + "\n")
 	summary.WriteString(labelStyle.Render("Config Path:") + " " + valueStyle.Render("/etc/node-pulse/nodepulse.yml"))
 
 	b.WriteString(boxStyle.Render(summary.String()))
@@ -410,7 +660,7 @@ func (m initTUIModel) viewSuccess() string {
 
 	// Summary box
 	var summary strings.Builder
-	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.serverID) + "\n")
+	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.config.ServerID) + "\n")
 	summary.WriteString(labelStyle.Render("Config:") + " " + valueStyle.Render("/etc/node-pulse/nodepulse.yml"))
 
 	b.WriteString(boxStyle.Render(summary.String()))
@@ -437,7 +687,7 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.screen = ScreenEndpoint
 		m.textInput.Placeholder = "https://api.nodepulse.io/metrics"
 		// Pre-populate with existing endpoint if available
-		if m.existing.Endpoint != "" {
+		if m.existing != nil && m.existing.Endpoint != "" {
 			m.textInput.SetValue(m.existing.Endpoint)
 		} else {
 			m.textInput.SetValue("")
@@ -458,12 +708,12 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.endpoint = endpoint
+		m.config.Endpoint = endpoint
 		m.err = nil
 
 		// Move to server ID screen
 		m.screen = ScreenServerID
-		if m.existing.HasServerID {
+		if m.existing != nil && m.existing.HasServerID {
 			m.textInput.Placeholder = "Leave empty to auto-generate UUID"
 			// Pre-populate with existing server ID
 			m.textInput.SetValue(strings.TrimSpace(m.existing.ServerID))
@@ -480,8 +730,8 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 
 		if serverID == "" {
 			// Use existing or generate
-			if m.existing.HasServerID {
-				m.serverID = strings.TrimSpace(m.existing.ServerID)
+			if m.existing != nil && m.existing.HasServerID {
+				m.config.ServerID = strings.TrimSpace(m.existing.ServerID)
 			} else {
 				// Will generate UUID
 				uuid, err := installer.HandleServerID("")
@@ -489,7 +739,7 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.err = err
 					return m, nil
 				}
-				m.serverID = uuid
+				m.config.ServerID = uuid
 			}
 		} else {
 			// Validate custom server ID
@@ -497,9 +747,87 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, nil
 			}
-			m.serverID = serverID
+			m.config.ServerID = serverID
 		}
 
+		m.err = nil
+
+		// Move to interval screen
+		m.screen = ScreenInterval
+		m.textInput.SetValue(m.config.Interval)
+		m.textInput.Placeholder = "5s, 10s, 30s, 1m"
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenInterval:
+		// Validate interval
+		interval := strings.TrimSpace(m.textInput.Value())
+		validIntervals := map[string]bool{"5s": true, "10s": true, "30s": true, "1m": true}
+		if !validIntervals[interval] {
+			m.err = fmt.Errorf("interval must be one of: 5s, 10s, 30s, 1m")
+			return m, nil
+		}
+
+		m.config.Interval = interval
+		m.err = nil
+
+		// Move to timeout screen
+		m.screen = ScreenTimeout
+		m.textInput.SetValue(m.config.Timeout)
+		m.textInput.Placeholder = "3s"
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenTimeout:
+		// Validate timeout (just check it's not empty and ends with 's')
+		timeout := strings.TrimSpace(m.textInput.Value())
+		if timeout == "" || !strings.HasSuffix(timeout, "s") {
+			m.err = fmt.Errorf("timeout must be a duration like '3s', '5s', etc.")
+			return m, nil
+		}
+
+		m.config.Timeout = timeout
+		m.err = nil
+
+		// Move to buffer screen
+		m.screen = ScreenBuffer
+		if m.config.BufferEnabled {
+			m.textInput.SetValue("yes")
+		} else {
+			m.textInput.SetValue("no")
+		}
+		m.textInput.Placeholder = "yes/no"
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenBuffer:
+		// Parse buffer settings
+		input := strings.ToLower(strings.TrimSpace(m.textInput.Value()))
+		if input != "yes" && input != "no" {
+			m.err = fmt.Errorf("enter 'yes' or 'no'")
+			return m, nil
+		}
+
+		m.config.BufferEnabled = (input == "yes")
+		m.err = nil
+
+		// Move to logging screen
+		m.screen = ScreenLogging
+		m.textInput.SetValue(m.config.LogLevel)
+		m.textInput.Placeholder = "debug, info, warn, error"
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenLogging:
+		// Validate log level
+		logLevel := strings.ToLower(strings.TrimSpace(m.textInput.Value()))
+		validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+		if !validLevels[logLevel] {
+			m.err = fmt.Errorf("log level must be one of: debug, info, warn, error")
+			return m, nil
+		}
+
+		m.config.LogLevel = logLevel
 		m.err = nil
 
 		// Move to review screen
@@ -526,17 +854,15 @@ func (m initTUIModel) runInstallStep(step int) tea.Cmd {
 		var err error
 
 		switch step {
-		case 0: // Check permissions
-			err = installer.CheckPermissions()
-		case 1: // Create directories
+		case 0: // Create directories
 			err = installer.CreateDirectories()
-		case 2: // Persist server ID
-			err = installer.PersistServerID(m.serverID)
-		case 3: // Write config file
-			err = installer.WriteConfigFile(m.endpoint, m.serverID)
-		case 4: // Fix permissions
+		case 1: // Persist server ID
+			err = installer.PersistServerID(m.config.ServerID)
+		case 2: // Write config file
+			err = installer.WriteConfigFile(m.config)
+		case 3: // Fix permissions
 			err = installer.FixPermissions()
-		case 5: // Validate installation
+		case 4: // Validate installation
 			err = installer.ValidateInstallation()
 		}
 
@@ -545,5 +871,28 @@ func (m initTUIModel) runInstallStep(step int) tea.Cmd {
 		}
 
 		return installStepMsg{step: step + 1, err: nil}
+	}
+}
+
+func (m initTUIModel) runCheckStep(step int) tea.Cmd {
+	return func() tea.Msg {
+		var err error
+		var existing *installer.ExistingInstall
+
+		switch step {
+		case 0: // Check permissions
+			err = installer.CheckPermissions()
+		case 1: // Detect existing installation
+			existing, err = installer.DetectExisting()
+			if err != nil {
+				return checkStepMsg{step: step, err: fmt.Errorf("failed to detect existing installation: %w", err)}
+			}
+		}
+
+		if err != nil {
+			return checkStepMsg{step: step, err: err}
+		}
+
+		return checkStepMsg{step: step + 1, existing: existing, err: nil}
 	}
 }

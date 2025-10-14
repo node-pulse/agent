@@ -23,6 +23,31 @@ type InstallConfig struct {
 	ServerID string // Optional: custom ID (alphanumeric + dashes) or empty to auto-generate UUID
 }
 
+// ConfigOptions holds all configurable options for the config file
+type ConfigOptions struct {
+	// Server options
+	Endpoint string
+	Timeout  string
+
+	// Agent options
+	ServerID string
+	Interval string
+
+	// Buffer options
+	BufferEnabled       bool
+	BufferPath          string
+	BufferRetentionHours int
+
+	// Logging options
+	LogLevel      string
+	LogOutput     string
+	LogFilePath   string
+	LogMaxSizeMB  int
+	LogMaxBackups int
+	LogMaxAgeDays int
+	LogCompress   bool
+}
+
 // ExistingInstall represents an existing installation
 type ExistingInstall struct {
 	HasConfig   bool
@@ -173,22 +198,58 @@ func isAlphanumeric(c rune) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
+// DefaultConfigOptions returns default configuration options
+func DefaultConfigOptions() ConfigOptions {
+	return ConfigOptions{
+		// Server defaults
+		Timeout: "3s",
+
+		// Agent defaults
+		Interval: "5s",
+
+		// Buffer defaults
+		BufferEnabled:       true,
+		BufferPath:          DefaultBufferPath,
+		BufferRetentionHours: 48,
+
+		// Logging defaults
+		LogLevel:      "info",
+		LogOutput:     "stdout",
+		LogFilePath:   "/var/log/node-pulse/agent.log",
+		LogMaxSizeMB:  10,
+		LogMaxBackups: 3,
+		LogMaxAgeDays: 7,
+		LogCompress:   true,
+	}
+}
+
 // WriteConfigFile writes the configuration file
-func WriteConfigFile(endpoint string, serverID string) error {
+func WriteConfigFile(opts ConfigOptions) error {
 	// Create config structure
 	configData := map[string]interface{}{
 		"server": map[string]interface{}{
-			"endpoint": endpoint,
-			"timeout":  "3s",
+			"endpoint": opts.Endpoint,
+			"timeout":  opts.Timeout,
 		},
 		"agent": map[string]interface{}{
-			"server_id": serverID,
-			"interval":  "5s",
+			"server_id": opts.ServerID,
+			"interval":  opts.Interval,
 		},
 		"buffer": map[string]interface{}{
-			"enabled":         true,
-			"path":            DefaultBufferPath,
-			"retention_hours": 48,
+			"enabled":         opts.BufferEnabled,
+			"path":            opts.BufferPath,
+			"retention_hours": opts.BufferRetentionHours,
+		},
+		"logging": map[string]interface{}{
+			"level":  opts.LogLevel,
+			"output": opts.LogOutput,
+			"file": map[string]interface{}{
+				"path":          opts.LogFilePath,
+				"max_size_mb":   opts.LogMaxSizeMB,
+				"max_backups":   opts.LogMaxBackups,
+				"max_age_days":  opts.LogMaxAgeDays,
+				"compress":      opts.LogCompress,
+			},
 		},
 	}
 

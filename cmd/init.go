@@ -33,46 +33,49 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	fmt.Println("⚡ NodePulse Agent Initialization")
-	fmt.Println()
-
-	// Check permissions
-	fmt.Print("Checking permissions... ")
-	if err := installer.CheckPermissions(); err != nil {
-		fmt.Println("✗")
-		return err
-	}
-	fmt.Println("✓")
-
-	// Detect existing installation
-	existing, err := installer.DetectExisting()
-	if err != nil {
-		return fmt.Errorf("failed to detect existing installation: %w", err)
-	}
-
-	// Handle existing installation
-	if existing.HasConfig || existing.HasServerID {
-		fmt.Println("\n⚠ Existing installation detected")
-		if existing.HasConfig {
-			fmt.Printf("  Config: %s\n", existing.ConfigPath)
-		}
-		if existing.HasServerID {
-			fmt.Printf("  Server ID: %s\n", strings.TrimSpace(existing.ServerID))
-		}
-		fmt.Println()
-
-		if !promptYesNo("Continue and update configuration?", true) {
-			fmt.Println("\nInstallation cancelled")
-			return nil
-		}
-		fmt.Println()
-	}
-
 	// Run appropriate mode
 	if quickMode {
+		// Quick mode: run checks before prompts
+		fmt.Println("⚡ NodePulse Agent Initialization")
+		fmt.Println()
+
+		// Check permissions
+		fmt.Print("Checking permissions... ")
+		if err := installer.CheckPermissions(); err != nil {
+			fmt.Println("✗")
+			return err
+		}
+		fmt.Println("✓")
+
+		// Detect existing installation
+		existing, err := installer.DetectExisting()
+		if err != nil {
+			return fmt.Errorf("failed to detect existing installation: %w", err)
+		}
+
+		// Handle existing installation
+		if existing.HasConfig || existing.HasServerID {
+			fmt.Println("\n⚠ Existing installation detected")
+			if existing.HasConfig {
+				fmt.Printf("  Config: %s\n", existing.ConfigPath)
+			}
+			if existing.HasServerID {
+				fmt.Printf("  Server ID: %s\n", strings.TrimSpace(existing.ServerID))
+			}
+			fmt.Println()
+
+			if !promptYesNo("Continue and update configuration?", true) {
+				fmt.Println("\nInstallation cancelled")
+				return nil
+			}
+			fmt.Println()
+		}
+
 		return runQuickMode(existing)
 	}
-	return runInteractive(existing)
+
+	// Interactive mode: TUI handles all checks
+	return runInteractive()
 }
 
 func runQuickMode(existing *installer.ExistingInstall) error {
@@ -131,14 +134,19 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 		fmt.Printf("Using server ID: %s\n", finalServerID)
 	}
 
+	// Create config options with defaults
+	opts := installer.DefaultConfigOptions()
+	opts.Endpoint = endpoint
+	opts.ServerID = finalServerID
+
 	// Perform installation
-	return performInstallation(endpoint, finalServerID)
+	return performInstallation(opts)
 }
 
-func runInteractive(existing *installer.ExistingInstall) error {
-	// Run TUI wizard
+func runInteractive() error {
+	// Run TUI wizard - it handles all checks internally
 	p := tea.NewProgram(
-		newInitTUIModel(existing),
+		newInitTUIModel(),
 		tea.WithAltScreen(),
 	)
 
@@ -149,7 +157,7 @@ func runInteractive(existing *installer.ExistingInstall) error {
 	return nil
 }
 
-func performInstallation(endpoint, serverID string) error {
+func performInstallation(opts installer.ConfigOptions) error {
 	fmt.Println()
 	fmt.Println("Installing...")
 	fmt.Println()
@@ -164,7 +172,7 @@ func performInstallation(endpoint, serverID string) error {
 
 	// Persist server ID
 	fmt.Print("Persisting server ID... ")
-	if err := installer.PersistServerID(serverID); err != nil {
+	if err := installer.PersistServerID(opts.ServerID); err != nil {
 		fmt.Println("✗")
 		return err
 	}
@@ -172,7 +180,7 @@ func performInstallation(endpoint, serverID string) error {
 
 	// Write config file
 	fmt.Print("Writing configuration file... ")
-	if err := installer.WriteConfigFile(endpoint, serverID); err != nil {
+	if err := installer.WriteConfigFile(opts); err != nil {
 		fmt.Println("✗")
 		return err
 	}
@@ -198,7 +206,7 @@ func performInstallation(endpoint, serverID string) error {
 	fmt.Println()
 	fmt.Println("✓ NodePulse agent initialized successfully!")
 	fmt.Println()
-	fmt.Printf("Server ID:  %s\n", serverID)
+	fmt.Printf("Server ID:  %s\n", opts.ServerID)
 	fmt.Printf("Config:     %s\n", installer.DefaultConfigPath)
 	fmt.Println()
 	fmt.Println("Next steps:")
