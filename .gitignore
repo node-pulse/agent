@@ -1,6 +1,7 @@
 # Binaries
 pulse
-pulse-*
+/pulse-*
+/build/pulse-*
 *.exe
 *.dll
 *.so
