@@ -49,7 +49,7 @@ server:
   timeout: 3s
 
 agent:
-  interval: 5s  # Options: 5s, 10s, 30s, 1m
+  interval: 5s # Options: 5s, 10s, 30s, 1m
 
 buffer:
   enabled: true
@@ -122,19 +122,23 @@ sudo pulse service uninstall
 ## Metrics Collected
 
 ### CPU
+
 - Usage percentage (calculated from `/proc/stat`)
 
 ### Memory
+
 - Used MB
 - Total MB
 - Usage percentage (calculated from `/proc/meminfo`)
 
 ### Network
+
 - Upload bytes (delta since last collection)
 - Download bytes (delta since last collection)
 - Collected from `/proc/net/dev` (excludes loopback interface)
 
 ### Uptime
+
 - System uptime in days (from `/proc/uptime`)
 
 ## JSON Report Format
@@ -270,7 +274,7 @@ View metrics in another terminal:
 
 ## License
 
-MIT License - See LICENSE file for details
+[MIT](LICENSE)
 
 ## Contributing
 
