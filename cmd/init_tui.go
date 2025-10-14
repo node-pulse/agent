@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -103,7 +104,9 @@ func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		default:
 			// Handle text input
-			if m.screen == ScreenEndpoint || m.screen == ScreenServerID {
+			if m.screen == ScreenEndpoint || m.screen == ScreenServerID ||
+				m.screen == ScreenInterval || m.screen == ScreenTimeout ||
+				m.screen == ScreenBuffer || m.screen == ScreenLogging {
 				var cmd tea.Cmd
 				m.textInput, cmd = m.textInput.Update(msg)
 				return m, cmd
@@ -878,6 +881,9 @@ func (m initTUIModel) runCheckStep(step int) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 		var existing *installer.ExistingInstall
+
+		// Add a small delay to make the checking steps visible
+		time.Sleep(400 * time.Millisecond)
 
 		switch step {
 		case 0: // Check permissions
