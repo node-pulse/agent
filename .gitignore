@@ -28,7 +28,6 @@ buffer/
 /etc/node-pulse/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
