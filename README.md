@@ -17,6 +17,11 @@ A lightweight, self-contained monitoring agent written in Go. It collects system
 - **Live View**: Built-in TUI for viewing metrics in real-time
 - **Cross-Platform**: Builds for both amd64 and arm64 architectures
 
+## Screenshots
+
+### Real-time View
+![Real-time monitoring dashboard](screenshots/real-time-view.png)
+
 ## Installation
 
 ### From Binary
