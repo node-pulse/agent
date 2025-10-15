@@ -231,17 +231,6 @@ func (m model) renderDashboard() string {
 	// If width >= 120, display grid layout; otherwise stack vertically
 	if m.width >= 120 {
 		// Row 1: Server Info and Current Metrics
-		metricsHeight := lipgloss.Height(currentMetrics)
-		serverHeight := lipgloss.Height(serverInfo)
-		row1MaxHeight := max(metricsHeight, serverHeight)
-
-		if metricsHeight < row1MaxHeight {
-			currentMetrics = lipgloss.NewStyle().Height(row1MaxHeight).Render(currentMetrics)
-		}
-		if serverHeight < row1MaxHeight {
-			serverInfo = lipgloss.NewStyle().Height(row1MaxHeight).Render(serverInfo)
-		}
-
 		row1 := lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			serverInfo,
@@ -295,11 +284,15 @@ func (m model) renderTrendGraphs() string {
 	// Calculate box width based on layout mode
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Side-by-side layout: half width minus spacing
-		boxWidth = (m.width / 2) - 3
+		// Side-by-side layout: calculate exact half width
+		// Total available: m.width - 4 (margins) - 1 (space between) = m.width - 5
+		// Each box gets half: (m.width - 5) / 2
+		// But Width() sets content width, so subtract borders (2) and padding (2)
+		boxWidth = (m.width - 5) / 2 - 4
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
@@ -374,12 +367,15 @@ func (m model) renderAlerts() string {
 	// Calculate box width based on layout mode
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Side-by-side layout: right box takes remaining width after left box and spacing
-		leftBoxWidth := (m.width / 2) - 3
-		boxWidth = m.width - 4 - leftBoxWidth - 1 // total - margins - left box - spacing
+		// Side-by-side layout: calculate exact half width (same as trendGraphs)
+		// Total available: m.width - 4 (margins) - 1 (space between) = m.width - 5
+		// Each box gets half: (m.width - 5) / 2
+		// But Width() sets content width, so subtract borders (2) and padding (2)
+		boxWidth = (m.width - 5) / 2 - 4
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
@@ -441,14 +437,19 @@ func (m model) getAlertsContentHeight() int {
 }
 
 func (m model) renderAgentStatus() string {
-	// Calculate box width - full width for this box
+	// Calculate box width - match the combined width of side-by-side boxes
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Full width layout
-		boxWidth = m.width - 4
+		// Match the visual width of the two boxes above (including the space between them)
+		// Two boxes: each is (m.width - 5) / 2 - 4 content + 2 borders = (m.width - 5) / 2 - 2 total
+		// With 1 space between: (m.width - 5) - 2 - 2 + 1 = m.width - 8
+		// So content width should be: m.width - 8 - 2 = m.width - 10
+		// Made 1 character narrower for better visual alignment
+		boxWidth = m.width - 11
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
@@ -553,14 +554,19 @@ func (m model) renderAgentStatus() string {
 }
 
 func (m model) renderTopProcesses() string {
-	// Calculate box width - full width for this box
+	// Calculate box width - match the combined width of side-by-side boxes
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Full width layout
-		boxWidth = m.width - 4
+		// Match the visual width of the two boxes above (including the space between them)
+		// Two boxes: each is (m.width - 5) / 2 - 4 content + 2 borders = (m.width - 5) / 2 - 2 total
+		// With 1 space between: (m.width - 5) - 2 - 2 + 1 = m.width - 8
+		// So content width should be: m.width - 8 - 2 = m.width - 10
+		// Made 1 character narrower for better visual alignment
+		boxWidth = m.width - 11
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
@@ -838,12 +844,15 @@ func (m model) renderCurrentMetrics() string {
 	// Calculate box width based on layout mode
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Side-by-side layout: right box takes remaining width after left box and spacing
-		leftBoxWidth := (m.width / 2) - 3
-		boxWidth = m.width - 4 - leftBoxWidth - 1 // total - margins - left box - spacing
+		// Side-by-side layout: calculate exact half width (same as serverInfo)
+		// Total available: m.width - 4 (margins) - 1 (space between) = m.width - 5
+		// Each box gets half: (m.width - 5) / 2
+		// But Width() sets content width, so subtract borders (2) and padding (2)
+		boxWidth = (m.width - 5) / 2 - 4
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
@@ -925,11 +934,15 @@ func (m model) renderServerInfo() string {
 	// Calculate box width based on layout mode
 	boxWidth := m.width - 4
 	if m.width >= 120 {
-		// Side-by-side layout: half width minus spacing
-		boxWidth = (m.width / 2) - 3
+		// Side-by-side layout: calculate exact half width
+		// Total available: m.width - 4 (margins) - 1 (space between) = m.width - 5
+		// Each box gets half: (m.width - 5) / 2
+		// But Width() sets content width, so subtract borders (2) and padding (2)
+		boxWidth = (m.width - 5) / 2 - 4
 	} else {
-		// Stack view: limit maximum width for better appearance
-		maxStackWidth := 80
+		// Stack view: account for borders (2) and padding (2)
+		boxWidth = boxWidth - 4
+		maxStackWidth := 76 // 80 - 4 for borders and padding
 		if boxWidth > maxStackWidth {
 			boxWidth = maxStackWidth
 		}
