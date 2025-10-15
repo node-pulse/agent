@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/node-pulse/agent/cmd/themes"
@@ -55,41 +54,24 @@ func runView(cmd *cobra.Command, args []string) error {
 type tickMsg time.Time
 
 type model struct {
-	cfg          *config.Config
-	sender       *report.Sender
-	report       *metrics.Report
-	stats        metrics.HourlyStatsSnapshot
-	bufferStatus report.BufferStatus
-	cpuProgress  progress.Model
-	memProgress  progress.Model
-	err          error
-	width        int
-	height       int
-	quitting     bool
-	serverID     string
+	cfg      *config.Config
+	sender   *report.Sender
+	report   *metrics.Report
+	stats    metrics.HourlyStatsSnapshot
+	err      error
+	width    int
+	height   int
+	quitting bool
+	serverID string
 }
 
 func initialModel(cfg *config.Config, sender *report.Sender) model {
-	cpuProg := progress.New(
-		progress.WithGradient(string(theme.Warning), string(theme.Error)),
-		progress.WithWidth(40),
-		progress.WithoutPercentage(),
-	)
-
-	memProg := progress.New(
-		progress.WithGradient(string(theme.Accent), string(theme.Primary)),
-		progress.WithWidth(40),
-		progress.WithoutPercentage(),
-	)
-
 	return model{
-		cfg:         cfg,
-		sender:      sender,
-		cpuProgress: cpuProg,
-		memProgress: memProg,
-		width:       80,
-		height:      24,
-		serverID:    cfg.Agent.ServerID,
+		cfg:      cfg,
+		sender:   sender,
+		width:    80,
+		height:   24,
+		serverID: cfg.Agent.ServerID,
 	}
 }
 
@@ -125,9 +107,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *metrics.Report:
 		m.report = msg
 		m.stats = metrics.GetGlobalStats().GetStats()
-		if m.sender != nil {
-			m.bufferStatus = m.sender.GetBufferStatus()
-		}
 		m.err = nil
 		return m, nil
 
@@ -151,33 +130,37 @@ func (m model) View() string {
 }
 
 func (m model) renderDashboard() string {
-	// Title
+	// ASCII Art Logo
+	logo := `
+ ███╗   ██╗ ██████╗ ██████╗ ███████╗██████╗ ██╗   ██╗██╗     ███████╗███████╗
+ ████╗  ██║██╔═══██╗██╔══██╗██╔════╝██╔══██╗██║   ██║██║     ██╔════╝██╔════╝
+ ██╔██╗ ██║██║   ██║██║  ██║█████╗  ██████╔╝██║   ██║██║     ███████╗█████╗
+ ██║╚██╗██║██║   ██║██║  ██║██╔══╝  ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝
+ ██║ ╚████║╚██████╔╝██████╔╝███████╗██║     ╚██████╔╝███████╗███████║███████╗
+ ╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝`
+
 	title := lipgloss.NewStyle().
-		Bold(true).
 		Foreground(theme.Primary).
-		Background(theme.Background).
-		Padding(0, 2).
-		MarginBottom(1).
-		Render("⚡ NodePulse Agent Dashboard")
+		Render(logo)
 
 	// Error handling
 	if m.err != nil {
 		errorBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(theme.Error).
-			Padding(1, 2).
+			Padding(0, 1).
 			Width(m.width - 4).
 			Render(lipgloss.NewStyle().
 				Foreground(theme.Error).
 				Render(fmt.Sprintf("✗ Error: %v", m.err)))
-		return lipgloss.JoinVertical(lipgloss.Left, title, errorBox, m.renderFooter())
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", errorBox, m.renderFooter())
 	}
 
 	if m.report == nil {
 		loading := lipgloss.NewStyle().
 			Foreground(theme.Accent).
 			Render("⟳ Collecting metrics...")
-		return lipgloss.JoinVertical(lipgloss.Left, title, loading, m.renderFooter())
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", loading, m.renderFooter())
 	}
 
 	// Build dashboard sections
@@ -185,23 +168,42 @@ func (m model) renderDashboard() string {
 
 	// Current Metrics Section
 	currentMetrics := m.renderCurrentMetrics()
-	sections = append(sections, currentMetrics)
 
 	// Hourly Stats Section
 	hourlyStats := m.renderHourlyStats()
-	sections = append(sections, hourlyStats)
 
-	// Two-column layout for buffer and agent info
-	bufferInfo := m.renderBufferStatus()
-	agentInfo := m.renderAgentInfo()
+	// Server Info Section
+	serverInfo := m.renderServerInfo()
 
-	bottomRow := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		bufferInfo,
-		lipgloss.NewStyle().Width(2).Render(" "),
-		agentInfo,
-	)
-	sections = append(sections, bottomRow)
+	// Responsive layout based on terminal width
+	// If width >= 120, display side-by-side; otherwise stack vertically
+	if m.width >= 120 {
+		// Calculate heights and equalize them
+		metricsHeight := lipgloss.Height(currentMetrics)
+		serverHeight := lipgloss.Height(serverInfo)
+		maxHeight := max(metricsHeight, serverHeight)
+
+		// Add padding to equalize heights
+		if metricsHeight < maxHeight {
+			currentMetrics = lipgloss.NewStyle().Height(maxHeight).Render(currentMetrics)
+		}
+		if serverHeight < maxHeight {
+			serverInfo = lipgloss.NewStyle().Height(maxHeight).Render(serverInfo)
+		}
+
+		topRow := lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			serverInfo,
+			lipgloss.NewStyle().Width(2).Render(" "),
+			currentMetrics,
+		)
+		sections = append(sections, topRow)
+		sections = append(sections, hourlyStats)
+	} else {
+		sections = append(sections, serverInfo)
+		sections = append(sections, currentMetrics)
+		sections = append(sections, hourlyStats)
+	}
 
 	// Footer
 	footer := m.renderFooter()
@@ -211,8 +213,7 @@ func (m model) renderDashboard() string {
 		lipgloss.Left,
 		title,
 		"",
-		strings.Join(sections, "\n\n"),
-		"",
+		strings.Join(sections, "\n"),
 		footer,
 	)
 
@@ -222,12 +223,19 @@ func (m model) renderDashboard() string {
 func (m model) renderCurrentMetrics() string {
 	r := m.report
 
+	// Calculate box width based on layout mode
+	boxWidth := m.width - 4
+	if m.width >= 120 {
+		// Side-by-side layout: half width minus spacing
+		boxWidth = (m.width / 2) - 3
+	}
+
 	// Create styled box
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
-		Padding(1, 2).
-		Width(m.width - 4)
+		Padding(0, 1).
+		Width(boxWidth)
 
 	var content strings.Builder
 
@@ -236,7 +244,7 @@ func (m model) renderCurrentMetrics() string {
 		Bold(true).
 		Foreground(theme.Accent).
 		Render("📊 Current Metrics")
-	content.WriteString(header + "\n\n")
+	content.WriteString(header + "\n")
 
 	// Hostname and timestamp
 	metaStyle := lipgloss.NewStyle().Foreground(theme.TextMuted)
@@ -246,41 +254,32 @@ func (m model) renderCurrentMetrics() string {
 			metaStyle.Render("  •  ") +
 			metaStyle.Render(formatTimestamp(r.Timestamp)),
 	)
-	content.WriteString("\n\n")
+	content.WriteString("\n")
 
-	// CPU with progress bar
+	// CPU
 	if r.CPU != nil {
-		cpuPercent := r.CPU.UsagePercent / 100.0
-		cpuBar := m.cpuProgress.ViewAs(cpuPercent)
-		cpuLabel := fmt.Sprintf("CPU  %5.1f%%", r.CPU.UsagePercent)
+		cpuLabel := fmt.Sprintf("CPU  %.1f%%", r.CPU.UsagePercent)
 		cpuColor := getPercentColor(r.CPU.UsagePercent)
 		content.WriteString(
-			lipgloss.NewStyle().Foreground(cpuColor).Bold(true).Render(cpuLabel) +
-				"  " + cpuBar + "\n",
+			lipgloss.NewStyle().Foreground(cpuColor).Bold(true).Render(cpuLabel) + "\n",
 		)
 	} else {
 		content.WriteString(renderErrorLine("CPU", "Failed to collect"))
 	}
 
-	// Memory with progress bar
+	// Memory
 	if r.Memory != nil {
-		memPercent := r.Memory.UsagePercent / 100.0
-		memBar := m.memProgress.ViewAs(memPercent)
-		memLabel := fmt.Sprintf("MEM  %5.1f%%", r.Memory.UsagePercent)
-		memColor := getPercentColor(r.Memory.UsagePercent)
-		memInfo := fmt.Sprintf(" %s / %s",
+		memLabel := fmt.Sprintf("MEM  %.1f%% (%s / %s)",
+			r.Memory.UsagePercent,
 			formatBytes(r.Memory.UsedMB*1024*1024),
 			formatBytes(r.Memory.TotalMB*1024*1024))
+		memColor := getPercentColor(r.Memory.UsagePercent)
 		content.WriteString(
-			lipgloss.NewStyle().Foreground(memColor).Bold(true).Render(memLabel) +
-				"  " + memBar +
-				lipgloss.NewStyle().Foreground(theme.TextMuted).Render(memInfo) + "\n",
+			lipgloss.NewStyle().Foreground(memColor).Bold(true).Render(memLabel) + "\n",
 		)
 	} else {
 		content.WriteString(renderErrorLine("MEM", "Failed to collect"))
 	}
-
-	content.WriteString("\n")
 
 	// Network
 	if r.Network != nil {
@@ -295,7 +294,7 @@ func (m model) renderCurrentMetrics() string {
 	// Uptime
 	if r.Uptime != nil {
 		uptimeIcon := lipgloss.NewStyle().Foreground(theme.Primary).Render("⏱")
-		content.WriteString(fmt.Sprintf("\n%s Uptime   %.1f days", uptimeIcon, r.Uptime.Days))
+		content.WriteString(fmt.Sprintf("%s Uptime   %.1f days\n", uptimeIcon, r.Uptime.Days))
 	}
 
 	return boxStyle.Render(content.String())
@@ -305,18 +304,17 @@ func (m model) renderHourlyStats() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
-		Padding(1, 2).
+		Padding(0, 1).
 		Width(m.width - 4)
 
 	var content strings.Builder
 
 	// Section title
-	hour := time.Now().Format("15:00")
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Success).
-		Render(fmt.Sprintf("📈 Current Hour Stats (%s)", hour))
-	content.WriteString(header + "\n\n")
+		Render("📈 Current Hour Stats")
+	content.WriteString(header + "\n")
 
 	stats := m.stats
 
@@ -325,13 +323,10 @@ func (m model) renderHourlyStats() string {
 	content.WriteString(renderStatLine("Success", fmt.Sprintf("%d", stats.SuccessCount)))
 	content.WriteString(renderStatLine("Failed", fmt.Sprintf("%d", stats.FailedCount)))
 
-	content.WriteString("\n")
-
 	// Averages
 	if stats.CollectionCount > 0 {
 		content.WriteString(renderStatLine("Avg CPU", fmt.Sprintf("%.1f%%", stats.AvgCPU)))
 		content.WriteString(renderStatLine("Avg Memory", fmt.Sprintf("%.1f%%", stats.AvgMemory)))
-		content.WriteString("\n")
 		content.WriteString(renderStatLine("Total Upload", formatBytes(stats.TotalUpload)))
 		content.WriteString(renderStatLine("Total Download", formatBytes(stats.TotalDownload)))
 	} else {
@@ -340,54 +335,30 @@ func (m model) renderHourlyStats() string {
 			Render("No data collected this hour yet"))
 	}
 
-	return boxStyle.Render(content.String())
+	return boxStyle.Render(strings.TrimRight(content.String(), "\n"))
 }
 
-func (m model) renderBufferStatus() string {
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.Border).
-		Padding(1, 2).
-		Width((m.width / 2) - 3)
-
-	var content strings.Builder
-
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(theme.Warning).
-		Render("💾 Buffer Status")
-	content.WriteString(header + "\n\n")
-
-	if !m.bufferStatus.HasBuffered {
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(theme.Success).
-			Render("✓ No buffered reports"))
-	} else {
-		content.WriteString(renderStatLine("Buffered Files", fmt.Sprintf("%d", m.bufferStatus.FileCount)))
-		content.WriteString(renderStatLine("Reports Queued", fmt.Sprintf("%d", m.bufferStatus.ReportCount)))
-		content.WriteString(renderStatLine("Size", fmt.Sprintf("%d KB", m.bufferStatus.TotalSizeKB)))
-		if !m.bufferStatus.OldestFile.IsZero() {
-			content.WriteString(renderStatLine("Oldest", m.bufferStatus.OldestFile.Format("15:04")))
-		}
+func (m model) renderServerInfo() string {
+	// Calculate box width based on layout mode
+	boxWidth := m.width - 4
+	if m.width >= 120 {
+		// Side-by-side layout: half width minus spacing
+		boxWidth = (m.width / 2) - 3
 	}
 
-	return boxStyle.Render(content.String())
-}
-
-func (m model) renderAgentInfo() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
-		Padding(1, 2).
-		Width((m.width / 2) - 3)
+		Padding(0, 1).
+		Width(boxWidth)
 
 	var content strings.Builder
 
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Primary).
-		Render("⚙️  Agent Info")
-	content.WriteString(header + "\n\n")
+		Render("🖥  Server Info")
+	content.WriteString(header + "\n")
 
 	// System info
 	if m.report != nil && m.report.SystemInfo != nil {
@@ -395,7 +366,6 @@ func (m model) renderAgentInfo() string {
 		content.WriteString(renderStatLine("Distro", fmt.Sprintf("%s %s", sys.Distro, sys.DistroVer)))
 		content.WriteString(renderStatLine("Kernel", sys.KernelVer))
 		content.WriteString(renderStatLine("Arch", fmt.Sprintf("%s (%d cores)", sys.Architecture, sys.CPUCores)))
-		content.WriteString("\n")
 	}
 
 	// Truncate endpoint if too long
@@ -411,7 +381,7 @@ func (m model) renderAgentInfo() string {
 	runningTime := time.Since(m.stats.StartTime)
 	content.WriteString(renderStatLine("Running", formatDuration(runningTime)))
 
-	return boxStyle.Render(content.String())
+	return boxStyle.Render(strings.TrimRight(content.String(), "\n"))
 }
 
 func (m model) renderFooter() string {
