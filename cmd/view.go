@@ -386,7 +386,7 @@ func (m model) renderAlerts() string {
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Warning).
-		Render("⚠️  Recent Alerts")
+		Render("🚨 Recent Alerts")
 	content.WriteString(header + "\n")
 
 	if len(m.alerts) == 0 {
@@ -461,7 +461,7 @@ func (m model) renderAgentStatus() string {
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Primary).
-		Render("⚙️  Node Pulse Agent Status (v1.0.0)")
+		Render("🔧 Node Pulse Agent Status (v1.0.0)")
 	content.WriteString(header + "\n")
 
 	// Prepare 6 items for 2-column layout (3 rows)
