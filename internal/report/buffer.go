@@ -62,36 +62,28 @@ func (b *Buffer) Save(report *metrics.Report) error {
 	return nil
 }
 
-// LoadAll loads all buffered reports and removes them from disk
-// Returns reports in chronological order (oldest first)
-func (b *Buffer) LoadAll() ([]*metrics.Report, error) {
+// GetBufferFiles returns all buffer file paths in chronological order (oldest first)
+func (b *Buffer) GetBufferFiles() ([]string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Get all buffer files
-	files, err := b.getBufferFiles()
-	if err != nil {
-		return nil, err
-	}
+	return b.getBufferFiles()
+}
 
-	var reports []*metrics.Report
+// LoadFile loads all reports from a specific buffer file without deleting it
+func (b *Buffer) LoadFile(filePath string) ([]*metrics.Report, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-	// Process each file
-	for _, filePath := range files {
-		// Read reports from file
-		fileReports, err := b.readBufferFile(filePath)
-		if err != nil {
-			// Log error but continue with other files
-			continue
-		}
+	return b.readBufferFile(filePath)
+}
 
-		reports = append(reports, fileReports...)
+// DeleteFile deletes a specific buffer file
+func (b *Buffer) DeleteFile(filePath string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-		// Remove file after successful read
-		os.Remove(filePath)
-	}
-
-	return reports, nil
+	return os.Remove(filePath)
 }
 
 // readBufferFile reads all reports from a buffer file

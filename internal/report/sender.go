@@ -96,31 +96,51 @@ func (s *Sender) sendHTTP(data []byte) error {
 }
 
 // FlushBuffer attempts to send all buffered reports
+// Processes files one at a time, only deleting after successful send
 func (s *Sender) FlushBuffer() {
 	if s.buffer == nil {
 		return
 	}
 
-	reports, err := s.buffer.LoadAll()
+	// Get all buffer files (oldest first)
+	files, err := s.buffer.GetBufferFiles()
 	if err != nil {
-		// Log error but don't fail
 		return
 	}
 
-	for _, report := range reports {
-		data, err := report.ToJSON()
+	// Process each file
+	for _, filePath := range files {
+		// Load reports from this file
+		reports, err := s.buffer.LoadFile(filePath)
 		if err != nil {
+			// Skip this file, try next one
 			continue
 		}
 
-		// Try to send
-		if err := s.sendHTTP(data); err != nil {
-			// If send fails, stop trying (we'll retry next time)
-			break
+		// Try to send all reports from this file
+		allSentSuccessfully := true
+		for _, report := range reports {
+			data, err := report.ToJSON()
+			if err != nil {
+				continue
+			}
+
+			// Try to send
+			if err := s.sendHTTP(data); err != nil {
+				// Send failed - connection is down again
+				// Stop processing and keep this file for next time
+				allSentSuccessfully = false
+				break
+			}
 		}
 
-		// If send succeeded, remove from buffer
-		// (This happens automatically since LoadAll removes files)
+		// Only delete the file if ALL reports were sent successfully
+		if allSentSuccessfully {
+			s.buffer.DeleteFile(filePath)
+		} else {
+			// Connection failed - stop trying, we'll retry next time
+			break
+		}
 	}
 
 	// Clean up old buffer files
