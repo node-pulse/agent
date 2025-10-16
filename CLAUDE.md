@@ -56,9 +56,9 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
 - **cmd/root.go**: Base command that all subcommands attach to
 - **cmd/agent.go**: Main agent loop - collects metrics at configured intervals and sends to server
 - **cmd/watch.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
-- **cmd/service.go**: systemd service management (install/start/stop/restart/uninstall)
+- **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
 - **cmd/init.go**: Interactive setup wizard for first-time configuration
-- **cmd/current_server.go**: Shows current server ID and where it's persisted
+- **cmd/status.go**: Shows comprehensive agent status including server ID, config, service status, buffer state, and logs
 
 ### Metrics Collection (internal/metrics/)
 Each metric type has its own collector that reads from `/proc` filesystem:
@@ -81,8 +81,10 @@ Two-tier reporting with HTTP + file-based buffering:
 - **buffer.go**: JSONL-based buffering system
   - Reports are appended to hourly files: `YYYY-MM-DD-HH.jsonl`
   - On next successful send, buffered reports are sent oldest-first
+  - Files are only deleted AFTER all their reports are successfully sent (not before)
+  - If flush fails mid-process, remaining files are kept for next retry
   - Files older than retention period (default 48h) are auto-cleaned
-  - Thread-safe with mutex locks
+  - Thread-safe with mutex locks preventing concurrent access issues
 
 ### Configuration (internal/config/)
 Uses [Viper](https://github.com/spf13/viper) for config loading from YAML:

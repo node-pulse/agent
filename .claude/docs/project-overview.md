@@ -21,8 +21,10 @@ agent/
 ├── cmd/
 │   ├── root.go           # Cobra root command
 │   ├── agent.go          # Agent command (runs monitoring)
+│   ├── init.go           # Interactive setup wizard
 │   ├── watch.go          # TUI watch command (Bubbletea interface)
-│   └── service.go        # Service management (install/start/stop/status/uninstall)
+│   ├── status.go         # Status command (shows server ID, config, service, buffer, logs)
+│   └── service.go        # Service management (install/start/stop/restart/status/uninstall)
 ├── internal/
 │   ├── metrics/          # Metrics collection + data models
 │   │   ├── cpu.go        # CPU usage collection
@@ -84,7 +86,7 @@ Each agent instance requires a unique `server_id` to identify which server is re
 **Stability:**
 - UUID persists across project re-initialization
 - UUID is regenerated only after OS reinstall (when persistent file is wiped)
-- Check current UUID: `pulse current-server`
+- Check current UUID: `pulse status`
 
 ### Buffer Strategy (Hourly JSONL Files)
 
@@ -100,6 +102,8 @@ When HTTP send fails or times out:
 - Each failed report appends to current hour's JSONL file
 - Retention: **48 hours max**
 - On successful send: attempt to send buffered files (oldest first)
+  - Files are only deleted AFTER all their reports are successfully sent
+  - If flush fails mid-process, remaining files are kept for next retry
 - Cleanup: delete files older than 48 hours
 
 **No retry logic within a cycle** - if send fails, buffer it and move on.
@@ -140,9 +144,10 @@ buffer:
 
 ### Core Commands
 ```bash
+pulse init                   # Interactive setup wizard (creates config, generates server ID)
 pulse agent                  # Run agent in foreground (for testing)
 pulse watch                  # Launch TUI to see live metrics (Bubbletea)
-pulse current-server         # Display current server ID and its location
+pulse status                 # Display comprehensive status (server ID, config, service, buffer, logs)
 ```
 
 ### Service Management (No systemd knowledge required)
@@ -151,7 +156,7 @@ pulse service install        # Install systemd service
 pulse service start          # Start the service
 pulse service stop           # Stop the service
 pulse service restart        # Restart the service
-pulse service status         # Check if running
+pulse service status         # Check detailed systemd service status
 pulse service uninstall      # Remove the service
 ```
 
@@ -236,10 +241,10 @@ If a metric fails to collect, it will be `null`:
 ## Development Phases
 
 1. ✅ Project planning and architecture
-2. ⏳ Core metrics collection implementation
-3. ⏳ HTTP sender + buffer logic
-4. ⏳ Cobra CLI commands
-5. ⏳ Systemd service management
-6. ⏳ Bubbletea TUI for live view
-7. ⏳ GoReleaser configuration
-8. ⏳ Testing & documentation
+2. ✅ Core metrics collection implementation
+3. ✅ HTTP sender + buffer logic
+4. ✅ Cobra CLI commands
+5. ✅ Systemd service management
+6. ✅ Bubbletea TUI for live view
+7. ✅ GoReleaser configuration
+8. ✅ Testing & documentation

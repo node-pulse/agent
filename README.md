@@ -82,7 +82,7 @@ The server ID uniquely identifies your server in the NodePulse system. The agent
   4. `./server_id` (fallback to current directory)
 - The same UUID will be reused on subsequent runs, even if you don't set it in the config
 - The persisted ID takes precedence over the config file to maintain consistency
-- You can check where your server ID is stored with: `pulse current-server`
+- You can check where your server ID is stored with: `pulse status`
 - You can also manually set a UUID in the config if you prefer:
   - Linux/Mac: `uuidgen`
   - PowerShell: `New-Guid`
@@ -96,6 +96,20 @@ sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
 ```
 
 ## Usage
+
+### Initialize Configuration (First Time Setup)
+
+```bash
+sudo pulse init
+```
+
+Interactive setup wizard that:
+- Creates necessary directories (`/etc/node-pulse`, `/var/lib/node-pulse`)
+- Generates and persists server ID
+- Creates configuration file with your settings
+- Guides you through endpoint and interval configuration
+
+Use `--yes` flag for quick mode with defaults.
 
 ### Run Agent in Foreground
 
@@ -111,19 +125,32 @@ pulse watch
 
 Press `q` to quit the live view.
 
-### Check Current Server ID
+### Check Agent Status
 
 ```bash
-pulse current-server
+pulse status
 ```
 
-Shows the UUID that identifies this server and where it's persisted.
+Shows comprehensive agent status including server ID, configuration, service status, buffer state, and logging.
 
 **Example output:**
 
 ```
-Server ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Persisted at: /var/lib/node-pulse/server_id
+Node Pulse Agent Status
+=====================
+
+Server ID:     a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Persisted at:  /var/lib/node-pulse/server_id
+
+Config File:   /etc/node-pulse/nodepulse.yml
+Endpoint:      https://api.nodepulse.io/metrics
+Interval:      5s
+
+Agent:         running (via systemd)
+
+Buffer:        3 report(s) pending in /var/lib/node-pulse/buffer
+
+Log File:      /var/log/node-pulse/agent.log
 ```
 
 ### Service Management
@@ -251,8 +278,12 @@ When HTTP reporting fails (timeout or error):
 
 1. The report is appended to an hourly JSONL file in the buffer directory
 2. Format: `/var/lib/node-pulse/buffer/2025-10-13-14.jsonl`
-3. On next successful send, buffered reports are sent (oldest first)
-4. Files older than 48 hours are automatically deleted
+3. On next successful send, buffered reports are flushed in background:
+   - Processes files oldest-first (chronological order)
+   - Sends all reports from a file
+   - Only deletes the file after ALL reports are successfully sent
+   - If connection fails mid-flush, remaining files are kept for next retry
+4. Files older than 48 hours are automatically deleted during cleanup
 
 ## Building
 
