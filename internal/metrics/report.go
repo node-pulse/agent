@@ -8,14 +8,15 @@ import (
 
 // Report represents the complete metrics report sent to the server
 type Report struct {
-	Timestamp  string          `json:"timestamp"`
-	ServerID   string          `json:"server_id"`
-	Hostname   string          `json:"hostname"`
-	SystemInfo *SystemInfo     `json:"system_info,omitempty"`
-	CPU        *CPUMetrics     `json:"cpu"`
-	Memory     *MemoryMetrics  `json:"memory"`
-	Network    *NetworkMetrics `json:"network"`
-	Uptime     *UptimeMetrics  `json:"uptime"`
+	Timestamp  string           `json:"timestamp"`
+	ServerID   string           `json:"server_id"`
+	Hostname   string           `json:"hostname"`
+	SystemInfo *SystemInfo      `json:"system_info,omitempty"`
+	CPU        *CPUMetrics      `json:"cpu"`
+	Memory     *MemoryMetrics   `json:"memory"`
+	Network    *NetworkMetrics  `json:"network"`
+	Uptime     *UptimeMetrics   `json:"uptime"`
+	Processes  *ProcessMetrics  `json:"processes"`
 }
 
 // Collect gathers all metrics and creates a complete report
@@ -57,6 +58,11 @@ func Collect(serverID string) (*Report, error) {
 
 	if uptime, err := CollectUptime(); err == nil {
 		report.Uptime = uptime
+		allFailed = false
+	}
+
+	if processes, err := CollectProcesses(); err == nil {
+		report.Processes = processes
 		allFailed = false
 	}
 
