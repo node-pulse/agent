@@ -107,6 +107,10 @@ func (m setupTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 
+		case "left", "b":
+			// Allow going back (except on certain screens)
+			return m.handleBack()
+
 		default:
 			// Handle text input
 			if m.screen == ScreenEndpoint || m.screen == ScreenServerID ||
@@ -397,7 +401,7 @@ func (m setupTUIModel) viewEndpoint() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("Example: https://api.nodepulse.io/metrics")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -445,7 +449,7 @@ func (m setupTUIModel) viewServerID() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("Format: letters, numbers, and dashes only")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -486,7 +490,7 @@ func (m setupTUIModel) viewInterval() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("Allowed values: 5s, 10s, 30s, 1m")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -527,7 +531,7 @@ func (m setupTUIModel) viewTimeout() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("Example: 3s (3 seconds)")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -570,7 +574,7 @@ func (m setupTUIModel) viewBuffer() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("Recommended: yes")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -617,7 +621,7 @@ func (m setupTUIModel) viewLogging() string {
 	b.WriteString(contentStyle.Render(textStyle.Render("error: Error messages only")))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • Esc to exit")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Enter to continue • ← Back • Esc to exit")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -672,7 +676,7 @@ func (m setupTUIModel) viewReview() string {
 	b.WriteString(contentStyle.Render(boxStyle.Render(summary.String())))
 	b.WriteString("\n\n")
 
-	b.WriteString(contentStyle.Render(helpStyle.Render("Press Enter to install • Esc to cancel")))
+	b.WriteString(contentStyle.Render(helpStyle.Render("Press Enter to install • ← Back • Esc to cancel")))
 
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
@@ -938,6 +942,74 @@ func (m setupTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	default:
+		return m, nil
+	}
+}
+
+func (m setupTUIModel) handleBack() (tea.Model, tea.Cmd) {
+	// Clear any previous errors when going back
+	m.err = nil
+
+	switch m.screen {
+	case ScreenEndpoint:
+		// Go back to welcome
+		m.screen = ScreenWelcome
+		return m, nil
+
+	case ScreenServerID:
+		// Go back to endpoint
+		m.screen = ScreenEndpoint
+		m.textInput.Placeholder = "https://api.nodepulse.io/metrics"
+		m.textInput.SetValue(m.config.Endpoint)
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenInterval:
+		// Go back to server ID
+		m.screen = ScreenServerID
+		m.textInput.Placeholder = "Leave empty to auto-generate UUID"
+		m.textInput.SetValue(m.config.ServerID)
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenTimeout:
+		// Go back to interval
+		m.screen = ScreenInterval
+		m.textInput.Placeholder = "5s, 10s, 30s, 1m"
+		m.textInput.SetValue(m.config.Interval)
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenBuffer:
+		// Go back to timeout
+		m.screen = ScreenTimeout
+		m.textInput.Placeholder = "3s"
+		m.textInput.SetValue(m.config.Timeout)
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenLogging:
+		// Go back to buffer
+		m.screen = ScreenBuffer
+		m.textInput.Placeholder = "yes/no"
+		if m.config.BufferEnabled {
+			m.textInput.SetValue("yes")
+		} else {
+			m.textInput.SetValue("no")
+		}
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	case ScreenReview:
+		// Go back to logging
+		m.screen = ScreenLogging
+		m.textInput.Placeholder = "debug, info, warn, error"
+		m.textInput.SetValue(m.config.LogLevel)
+		m.textInput.Focus()
+		return m, textinput.Blink
+
+	default:
+		// Don't allow back on splash, checking, installing, success screens
 		return m, nil
 	}
 }
