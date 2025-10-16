@@ -93,11 +93,56 @@ Interactive setup wizard that:
 
 Use `--yes` flag for quick mode with defaults.
 
-### Run Agent in Foreground
+### Running the Agent
+
+#### Foreground Mode (Development/Testing)
 
 ```bash
 pulse start
 ```
+
+Runs the agent in the foreground (blocks the terminal). Best for development and testing.
+- Stop with: **Ctrl+C** (gracefully shuts down and cleans up)
+- Creates PID file to prevent duplicate runs
+- Logs to stdout by default
+
+#### Daemon Mode (Background - Development Only)
+
+```bash
+pulse start -d
+```
+
+Runs the agent in the background for quick testing. **Not recommended for production.**
+- Detaches from terminal and runs in background
+- Creates PID file for process management
+- Stop with: `pulse stop`
+
+```bash
+pulse stop
+```
+
+Stops the background daemon agent:
+- Sends SIGTERM for graceful shutdown (waits up to 5 seconds)
+- Sends SIGKILL if process doesn't stop gracefully
+- Automatically cleans up PID file
+- **Note**: Only stops daemon mode agents, not systemd-managed services
+
+#### Production Mode (Systemd Service)
+
+For production deployments, use systemd service management:
+
+```bash
+sudo pulse service install
+sudo pulse service start
+```
+
+Benefits:
+- Automatic restart on failure
+- Starts on system boot
+- Managed by systemd (no PID file needed)
+- Stop with: `sudo pulse service stop`
+
+**Important**: `pulse stop` will not stop systemd-managed agents. If you try to stop a systemd service with `pulse stop`, you'll see a helpful message directing you to use `pulse service stop` instead.
 
 ### Watch Live Metrics
 
@@ -392,8 +437,8 @@ make build-linux-arm64
 - **OS**: Linux (uses `/proc` filesystem)
 - **Architectures**: amd64, arm64
 - **Permissions**:
-  - Normal user for `pulse start` and `pulse watch`
-  - Root (sudo) for `pulse service` commands
+  - Normal user for `pulse start`, `pulse start -d`, `pulse stop`, and `pulse watch`
+  - Root (sudo) for `pulse service` commands and `pulse setup`
 
 ## Development
 

@@ -20,7 +20,8 @@ Monitor Linux server health metrics and report them to a central server.
 agent/
 ├── cmd/
 │   ├── root.go           # Cobra root command
-│   ├── agent.go          # Agent command (runs monitoring)
+│   ├── start.go          # Start command (foreground and daemon modes)
+│   ├── stop.go           # Stop command (stops daemon mode only)
 │   ├── setup.go          # Interactive setup wizard
 │   ├── watch.go          # TUI watch command (Bubbletea interface)
 │   ├── status.go         # Status command (shows server ID, config, service, buffer, logs)
@@ -154,10 +155,35 @@ buffer:
 
 ```bash
 pulse setup                  # Interactive setup wizard (creates config, generates server ID)
-pulse start                  # Run agent in foreground (for testing)
+pulse start                  # Run agent in foreground (for testing/development)
+pulse start -d               # Run agent in background daemon mode (development only)
+pulse stop                   # Stop daemon mode agent (does not affect systemd service)
 pulse watch                  # Launch TUI to see live metrics (Bubbletea)
 pulse status                 # Display comprehensive status (server ID, config, service, buffer, logs)
 ```
+
+### Running Modes
+
+**1. Foreground Mode** (`pulse start`)
+- Blocks terminal, runs in foreground
+- Creates PID file to prevent duplicate runs
+- Stop with: Ctrl+C (graceful shutdown with cleanup)
+- Best for: Development and testing
+
+**2. Daemon Mode** (`pulse start -d`)
+- Runs in background, detached from terminal
+- Creates PID file for process management
+- Stop with: `pulse stop` command
+- Sends SIGTERM (5s grace period) then SIGKILL if needed
+- Best for: Quick testing, not production
+
+**3. Systemd Service** (`pulse service start`)
+- Managed by systemd (no PID file)
+- Auto-restart on failure, boot on startup
+- Stop with: `pulse service stop`
+- Best for: Production deployments
+
+**Important**: `pulse stop` only works for daemon mode. If systemd service is running, it provides helpful guidance to use `pulse service stop` instead.
 
 ### Service Management (No systemd knowledge required)
 

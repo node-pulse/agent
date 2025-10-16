@@ -54,7 +54,13 @@ make deps
 The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
 
 - **cmd/root.go**: Base command that all subcommands attach to
-- **cmd/agent.go**: Main agent loop - collects metrics at configured intervals and sends to server
+- **cmd/start.go**: Start command with three modes:
+  - Foreground mode (`pulse start`): Runs in terminal, blocks execution
+  - Daemon mode (`pulse start -d`): Spawns background process using `exec.Command` with `Setsid: true`
+  - Both modes create PID file EXCEPT when running under systemd (detected via `INVOCATION_ID` env var)
+- **cmd/stop.go**: Stops daemon mode only (reads PID file, sends SIGTERM → SIGKILL if needed)
+  - Will NOT stop systemd-managed processes (they don't create PID files)
+  - Provides helpful message if systemd service is running
 - **cmd/watch.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
 - **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
 - **cmd/setup.go**: Interactive setup wizard for first-time configuration (command: `pulse setup`)
@@ -116,6 +122,39 @@ Tracks hourly statistics for the dashboard:
 - Total upload/download bytes
 - Stats reset each hour automatically
 
+### PID File Management (internal/pidfile/)
+Handles process tracking and prevents duplicate agent runs:
+
+- **Location**: `/var/run/pulse.pid` (root) or `~/.node-pulse/pulse.pid` (user)
+- **Stale PID detection**: `CheckRunning()` automatically detects and cleans stale PID files by sending signal 0 to check process existence
+- **Lifecycle**:
+  - Foreground mode: Creates PID file → `defer RemovePidFile()` → Ctrl+C triggers graceful shutdown → deferred cleanup runs
+  - Daemon mode: Parent checks, child creates PID file → `pulse stop` removes it
+  - Systemd mode: **No PID file created** (systemd manages the process itself)
+- **Systemd detection**: Checks for `INVOCATION_ID` environment variable (automatically set by systemd for all services)
+
+### Process Separation (No Conflicts)
+
+**Three independent execution paths:**
+
+1. **Foreground** (`pulse start`)
+   - Creates PID file
+   - Blocks terminal
+   - Stop: Ctrl+C (signal handler → graceful shutdown → deferred cleanup)
+
+2. **Daemon** (`pulse start -d`)
+   - Creates PID file
+   - Detached process (`Setsid: true`)
+   - Stop: `pulse stop` (reads PID → SIGTERM → wait 5s → SIGKILL if needed)
+
+3. **Systemd** (`pulse service start`)
+   - **No PID file** (systemd tracks it via cgroups)
+   - Managed by systemd (auto-restart, boot persistence)
+   - Stop: `pulse service stop` (calls `systemctl stop`)
+   - `pulse stop` cannot affect it (no PID file to read)
+
+**Protection**: If user runs `pulse stop` when only systemd service is active, it detects this (`systemctl is-active --quiet node-pulse`) and displays helpful guidance to use `pulse service stop` instead.
+
 ## Agent Main Loop (cmd/start.go)
 
 1. Load configuration
@@ -147,8 +186,8 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipglos
 - **Linux-only**: All metrics depend on `/proc` filesystem
 - **Architectures**: Built for amd64 and arm64 only
 - **Permissions**:
-  - Regular user can run `pulse start` and `pulse watch`
-  - Root required for `pulse service` commands and writing to `/etc` and `/var`
+  - Regular user can run `pulse start`, `pulse start -d`, `pulse stop`, and `pulse watch`
+  - Root required for `pulse service` commands and `pulse setup` (writes to `/etc` and `/var`)
 
 ## Testing Notes
 
