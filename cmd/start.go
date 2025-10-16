@@ -38,20 +38,27 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return runInBackground()
 	}
 
-	// Check if agent is already running
-	isRunning, existingPid, err := pidfile.CheckRunning()
-	if err != nil {
-		return fmt.Errorf("failed to check if agent is running: %w", err)
-	}
-	if isRunning {
-		return fmt.Errorf("agent is already running with PID %d", existingPid)
-	}
+	// Check if running under systemd (systemd sets INVOCATION_ID for all services)
+	isSystemdManaged := os.Getenv("INVOCATION_ID") != ""
 
-	// Write PID file for this process
-	if err := pidfile.WritePidFile(os.Getpid()); err != nil {
-		return fmt.Errorf("failed to write PID file: %w", err)
+	// Only manage PID file if NOT running under systemd
+	// (systemd tracks the PID itself, and we don't want 'pulse stop' to kill systemd-managed processes)
+	if !isSystemdManaged {
+		// Check if agent is already running
+		isRunning, existingPid, err := pidfile.CheckRunning()
+		if err != nil {
+			return fmt.Errorf("failed to check if agent is running: %w", err)
+		}
+		if isRunning {
+			return fmt.Errorf("agent is already running with PID %d", existingPid)
+		}
+
+		// Write PID file for this process
+		if err := pidfile.WritePidFile(os.Getpid()); err != nil {
+			return fmt.Errorf("failed to write PID file: %w", err)
+		}
+		defer pidfile.RemovePidFile()
 	}
-	defer pidfile.RemovePidFile()
 
 	// Load configuration
 	cfg, err := config.Load(cfgFile)

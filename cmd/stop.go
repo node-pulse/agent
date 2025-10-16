@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 
@@ -30,6 +31,14 @@ func stopAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	if !isRunning {
+		// Check if systemd service might be running instead
+		if isSystemdServiceActive() {
+			fmt.Println("No daemon agent is running.")
+			fmt.Println("However, the systemd service appears to be active.")
+			fmt.Println("To stop the systemd service, use:")
+			fmt.Println("  sudo pulse service stop")
+			return nil
+		}
 		fmt.Println("No agent is running")
 		return nil
 	}
@@ -76,4 +85,10 @@ func stopAgent(cmd *cobra.Command, args []string) error {
 	fmt.Println("Agent stopped (forced)")
 
 	return nil
+}
+
+// isSystemdServiceActive checks if the node-pulse systemd service is active
+func isSystemdServiceActive() bool {
+	cmd := exec.Command("systemctl", "is-active", "--quiet", "node-pulse")
+	return cmd.Run() == nil
 }
