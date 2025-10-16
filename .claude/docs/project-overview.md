@@ -21,7 +21,7 @@ agent/
 ├── cmd/
 │   ├── root.go           # Cobra root command
 │   ├── agent.go          # Agent command (runs monitoring)
-│   ├── view.go           # TUI view command (Bubbletea interface)
+│   ├── watch.go          # TUI watch command (Bubbletea interface)
 │   └── service.go        # Service management (install/start/stop/status/uninstall)
 ├── internal/
 │   ├── metrics/          # Metrics collection + data models
@@ -141,7 +141,7 @@ buffer:
 ### Core Commands
 ```bash
 pulse agent                  # Run agent in foreground (for testing)
-pulse view                   # Launch TUI to see live metrics (Bubbletea)
+pulse watch                  # Launch TUI to see live metrics (Bubbletea)
 pulse current-server         # Display current server ID and its location
 ```
 

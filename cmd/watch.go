@@ -23,19 +23,19 @@ import (
 // Get theme for easy access
 var theme = themes.Current
 
-// viewCmd represents the view command
-var viewCmd = &cobra.Command{
-	Use:   "view",
-	Short: "View live metrics in terminal UI",
+// watchCmd represents the watch command
+var watchCmd = &cobra.Command{
+	Use:   "watch",
+	Short: "Watch live metrics in terminal UI",
 	Long:  `Displays real-time server metrics in a beautiful terminal dashboard.`,
-	RunE:  runView,
+	RunE:  runWatch,
 }
 
 func init() {
-	rootCmd.AddCommand(viewCmd)
+	rootCmd.AddCommand(watchCmd)
 }
 
-func runView(cmd *cobra.Command, args []string) error {
+func runWatch(cmd *cobra.Command, args []string) error {
 	// Load configuration
 	cfg, err := config.Load(cfgFile)
 	if err != nil {

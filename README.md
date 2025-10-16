@@ -3,6 +3,7 @@
 A lightweight, self-contained monitoring agent written in Go. It collects system metrics (CPU, memory, network I/O, and uptime) and reports them to your NodePulse control server via HTTP.
 
 **Lightweight & Efficient:**
+
 - Single binary, <15 MB
 - <40 MB RAM usage
 - Real-time metrics with configurable intervals (5s to 1m)
@@ -19,8 +20,9 @@ A lightweight, self-contained monitoring agent written in Go. It collects system
 
 ## Screenshots
 
-### Real-time View
-![Real-time monitoring dashboard](screenshots/real-time-view.png)
+### Real-time Metrics ( run `pulse watch`)
+
+![Real-time monitoring dashboard](screenshots/pulse-watch.png)
 
 ## Installation
 
@@ -59,8 +61,8 @@ server:
   timeout: 3s
 
 agent:
-  server_id: "your-unique-uuid-here"  # Required: UUID to identify this server
-  interval: 5s                         # Options: 5s, 10s, 30s, 1m
+  server_id: "your-unique-uuid-here" # Required: UUID to identify this server
+  interval: 5s # Options: 5s, 10s, 30s, 1m
 
 buffer:
   enabled: true
@@ -69,6 +71,7 @@ buffer:
 ```
 
 **Server ID Generation**:
+
 - If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
 - The generated UUID is saved to `/var/lib/node-pulse/server_id` (or similar location)
 - The same UUID will be reused on subsequent runs
@@ -92,10 +95,10 @@ sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
 pulse agent
 ```
 
-### View Live Metrics
+### Watch Live Metrics
 
 ```bash
-pulse view
+pulse watch
 ```
 
 Press `q` to quit the live view.
@@ -109,6 +112,7 @@ pulse current-server
 Shows the UUID that identifies this server and where it's persisted.
 
 **Example output:**
+
 ```
 Server ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Persisted at: /var/lib/node-pulse/server_id
@@ -289,7 +293,7 @@ make build-linux-arm64
 - **OS**: Linux (uses `/proc` filesystem)
 - **Architectures**: amd64, arm64
 - **Permissions**:
-  - Normal user for `pulse agent` and `pulse view`
+  - Normal user for `pulse agent` and `pulse watch`
   - Root (sudo) for `pulse service` commands
 
 ## Development
@@ -301,7 +305,7 @@ agent/
 ├── cmd/                  # CLI commands
 │   ├── root.go          # Root command
 │   ├── agent.go         # Agent runner
-│   ├── view.go          # TUI view
+│   ├── watch.go         # TUI watch
 │   └── service.go       # Service management
 ├── internal/
 │   ├── metrics/         # Metrics collection
@@ -336,7 +340,7 @@ make build
 View metrics in another terminal:
 
 ```bash
-./build/pulse view
+./build/pulse watch
 ```
 
 ## License

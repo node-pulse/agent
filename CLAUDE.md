@@ -55,7 +55,7 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
 
 - **cmd/root.go**: Base command that all subcommands attach to
 - **cmd/agent.go**: Main agent loop - collects metrics at configured intervals and sends to server
-- **cmd/view.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
+- **cmd/watch.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
 - **cmd/service.go**: systemd service management (install/start/stop/restart/uninstall)
 - **cmd/init.go**: Interactive setup wizard for first-time configuration
 - **cmd/current_server.go**: Shows current server ID and where it's persisted
@@ -129,7 +129,7 @@ Tracks hourly statistics for the dashboard:
    - On success: record success, trigger background buffer flush
    - On failure: record failure, report is auto-buffered
 
-## TUI Dashboard (cmd/view.go)
+## TUI Dashboard (cmd/watch.go)
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipgloss](https://github.com/charmbracelet/lipgloss):
 
@@ -145,16 +145,16 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipglos
 - **Linux-only**: All metrics depend on `/proc` filesystem
 - **Architectures**: Built for amd64 and arm64 only
 - **Permissions**:
-  - Regular user can run `pulse agent` and `pulse view`
+  - Regular user can run `pulse agent` and `pulse watch`
   - Root required for `pulse service` commands and writing to `/etc` and `/var`
 
 ## Testing Notes
 
-Since the agent relies on Linux `/proc` files, development/testing should be done on a Linux system or VM. The TUI view is helpful for visual verification during development.
+Since the agent relies on Linux `/proc` files, development/testing should be done on a Linux system or VM. The TUI watch command is helpful for visual verification during development.
 
 To test the full flow locally:
 1. Run `make dev` or `go run . agent` in one terminal
-2. Run `./build/pulse view` in another terminal to see live metrics
+2. Run `./build/pulse watch` in another terminal to see live metrics
 3. Verify buffering by pointing endpoint to invalid URL and checking buffer directory
 
 ## Release Process

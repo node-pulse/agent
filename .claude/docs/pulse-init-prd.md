@@ -151,7 +151,7 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
 
       Next steps:
         1. Start the agent:    pulse agent
-        2. View live metrics:  pulse view
+        2. Watch live metrics: pulse watch
         3. Install service:    sudo pulse service install
       ```
     - Optional: Ask "Install as systemd service now? [y/N]"

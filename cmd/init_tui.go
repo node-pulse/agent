@@ -764,7 +764,7 @@ func (m initTUIModel) viewSuccess() string {
 	b.WriteString("\n\n")
 	b.WriteString(contentStyle.Render(textStyle.Render("  1. Start the agent:    pulse agent")))
 	b.WriteString("\n")
-	b.WriteString(contentStyle.Render(textStyle.Render("  2. View live metrics:  pulse view")))
+	b.WriteString(contentStyle.Render(textStyle.Render("  2. Watch live metrics: pulse watch")))
 	b.WriteString("\n")
 	b.WriteString(contentStyle.Render(textStyle.Render("  3. Install service:    sudo pulse service install")))
 	b.WriteString("\n\n")
