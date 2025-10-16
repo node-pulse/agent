@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// NetworkMetrics represents network I/O information
+// NetworkMetrics represents network I/O information (delta since last collection)
 type NetworkMetrics struct {
 	UploadBytes   uint64 `json:"upload_bytes"`
 	DownloadBytes uint64 `json:"download_bytes"`
