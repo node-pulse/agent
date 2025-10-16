@@ -1,12 +1,13 @@
-# NodePulse Agent Logging System - PRD
+# Node Pulse Agent Logging System - PRD
 
 ## Overview
 
-The NodePulse agent currently uses basic `log.Println()` statements that output to stdout/stderr. As a system monitoring agent that runs as a daemon, it requires a robust, configurable logging system for debugging, troubleshooting, and operational visibility.
+The Node Pulse agent currently uses basic `log.Println()` statements that output to stdout/stderr. As a system monitoring agent that runs as a daemon, it requires a robust, configurable logging system for debugging, troubleshooting, and operational visibility.
 
 ## Background
 
 Current state:
+
 - Simple `log.Println()` statements scattered throughout the codebase
 - No log levels (everything is treated as INFO)
 - No structured logging
@@ -35,45 +36,53 @@ Current state:
 ### Functional Requirements
 
 #### FR1: Log Levels
+
 - Support standard log levels: DEBUG, INFO, WARN, ERROR
 - Default level: INFO
 - Configurable via config file
 - Lower levels include higher severity logs (e.g., INFO includes WARN and ERROR)
 
 #### FR2: Log Outputs
+
 - **Console output**: Write to stdout/stderr
 - **File output**: Write to a log file with rotation
 - **Both**: Write to both console and file simultaneously
 - Configurable via config file
 
 #### FR3: Log Rotation
+
 - Rotate logs based on file size
 - Keep a configurable number of backup files
 - Keep logs for a configurable number of days
 - Use timestamp-based naming for rotated files
 
 #### FR4: Configuration
+
 Add new section to `nodepulse.yml`:
+
 ```yaml
 logging:
-  level: "info"           # debug, info, warn, error
-  output: "both"          # stdout, file, both
+  level: "info" # debug, info, warn, error
+  output: "both" # stdout, file, both
   file:
     path: "/var/log/node-pulse/agent.log"
     max_size_mb: 10
     max_backups: 3
     max_age_days: 7
-    compress: true        # gzip old log files
+    compress: true # gzip old log files
 ```
 
 #### FR5: Log Content
+
 Each log entry should include:
+
 - Timestamp (ISO 8601 format with timezone)
 - Log level
 - Message
 - Optional structured fields (key-value pairs)
 
 Example format:
+
 ```
 2025-10-14T15:04:05-04:00 INFO  Agent started (server_id=abc-123, interval=5s)
 2025-10-14T15:04:10-04:00 ERROR Failed to send report: connection timeout
@@ -83,21 +92,25 @@ Example format:
 ### Non-Functional Requirements
 
 #### NFR1: Performance
+
 - Logging should add < 1ms overhead per call
 - Use buffered I/O for file writes
 - Async logging for non-critical messages (INFO, DEBUG)
 
 #### NFR2: Reliability
+
 - Never crash the agent due to logging errors
 - If log file cannot be written, fall back to stderr
 - Handle disk full scenarios gracefully
 
 #### NFR3: Security
+
 - Log files should have restricted permissions (0640)
 - Do not log sensitive data (API keys, tokens)
 - Sanitize any user-provided input before logging
 
 #### NFR4: Compatibility
+
 - Work on Linux, macOS, and Windows
 - Handle different filesystem permissions
 - Work with systemd, Docker, and bare-metal deployments
@@ -107,6 +120,7 @@ Example format:
 ### Library Selection
 
 Use **[lumberjack](https://github.com/natefinch/lumberjack)** for log rotation:
+
 - Lightweight and battle-tested
 - Automatic rotation based on size, age, and count
 - No external dependencies
@@ -114,13 +128,13 @@ Use **[lumberjack](https://github.com/natefinch/lumberjack)** for log rotation:
 
 Use **[logrus](https://github.com/sirupsen/logrus)** or **[zap](https://go.uber.org/zap)** for structured logging:
 
-| Feature | logrus | zap |
-|---------|--------|-----|
-| Performance | Good | Excellent (2-3x faster) |
-| API complexity | Simple | More complex |
-| Structured logging | Yes | Yes |
-| Community | Large | Large |
-| Maintenance | Active | Active |
+| Feature            | logrus | zap                     |
+| ------------------ | ------ | ----------------------- |
+| Performance        | Good   | Excellent (2-3x faster) |
+| API complexity     | Simple | More complex            |
+| Structured logging | Yes    | Yes                     |
+| Community          | Large  | Large                   |
+| Maintenance        | Active | Active                  |
 
 **Recommendation**: Use **zap** for better performance, as the agent needs to be efficient.
 
@@ -167,6 +181,7 @@ internal/
 ### Key Components
 
 #### 1. Logger Configuration
+
 ```go
 type LogConfig struct {
     Level  string     `yaml:"level"`
@@ -184,11 +199,13 @@ type FileConfig struct {
 ```
 
 #### 2. Logger Initialization
+
 ```go
 func InitLogger(cfg LogConfig) (*zap.Logger, error)
 ```
 
 #### 3. Global Logger Access
+
 ```go
 var logger *zap.Logger
 
@@ -207,6 +224,7 @@ func Warn(msg string, fields ...zap.Field)
 5. Remove old `log` package imports
 
 Example migration:
+
 ```go
 // Before
 log.Printf("Agent started (server_id: %s, interval: %s)\n", serverID, interval)
@@ -220,6 +238,7 @@ logger.Info("Agent started",
 ## Implementation Plan
 
 ### Phase 1: Core Logging Infrastructure (Day 1)
+
 - [ ] Add dependencies: `go.uber.org/zap` and `gopkg.in/natefinch/lumberjack.v2`
 - [ ] Create `internal/logger` package
 - [ ] Implement logger initialization with config
@@ -228,6 +247,7 @@ logger.Info("Agent started",
 - [ ] Unit tests for logger initialization
 
 ### Phase 2: Integration (Day 1-2)
+
 - [ ] Initialize logger in `main.go`
 - [ ] Replace `log.Println` calls in `cmd/agent.go`
 - [ ] Replace logging in `internal/report/sender.go`
@@ -235,12 +255,14 @@ logger.Info("Agent started",
 - [ ] Add structured fields for key operations
 
 ### Phase 3: Enhancement (Day 2)
+
 - [ ] Add debug logging for metrics collection
 - [ ] Add debug logging for HTTP requests/responses
 - [ ] Add error logging with stack traces for critical failures
 - [ ] Ensure proper log levels throughout
 
 ### Phase 4: Testing & Documentation (Day 2-3)
+
 - [ ] Integration tests for file rotation
 - [ ] Test logging in different output modes (stdout, file, both)
 - [ ] Test with different log levels
@@ -250,6 +272,7 @@ logger.Info("Agent started",
 ## Configuration Examples
 
 ### Development (verbose logging to console)
+
 ```yaml
 logging:
   level: "debug"
@@ -257,6 +280,7 @@ logging:
 ```
 
 ### Production (structured logs to file with rotation)
+
 ```yaml
 logging:
   level: "info"
@@ -270,6 +294,7 @@ logging:
 ```
 
 ### Minimal (errors only)
+
 ```yaml
 logging:
   level: "error"
@@ -323,6 +348,7 @@ logging:
 ## Appendix: Log Message Guidelines
 
 ### Good Log Messages
+
 ```go
 ✓ logger.Info("Agent started", zap.String("server_id", id), zap.Duration("interval", interval))
 ✓ logger.Error("Failed to send report", zap.Error(err), zap.Int("retry_count", retries))
@@ -330,6 +356,7 @@ logging:
 ```
 
 ### Bad Log Messages
+
 ```go
 ✗ logger.Info("Starting...")  // Too vague
 ✗ logger.Error("Error")       // No context
@@ -339,16 +366,19 @@ logging:
 ### Log Level Guidelines
 
 - **DEBUG**: Detailed diagnostic information for troubleshooting
+
   - Metrics values before/after collection
   - HTTP request/response details
   - Buffer file operations
 
 - **INFO**: General informational messages about normal operation
+
   - Agent startup/shutdown
   - Successful report sends
   - Configuration changes
 
 - **WARN**: Potentially harmful situations that don't prevent operation
+
   - Retry attempts
   - Deprecated configuration options
   - Non-critical errors with fallbacks

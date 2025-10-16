@@ -26,8 +26,24 @@ A lightweight, self-contained monitoring agent written in Go. It collects system
 
 ## Installation
 
+### Quick Install (Recommended)
+
+The fastest way to install the NodePulse agent:
+
+```bash
+curl -fsSL https://get.nodepulse.sh | sudo bash
+```
+
+This script will automatically:
+
+- Detect your architecture (amd64 or arm64)
+- Download the latest release
+- Install the binary to `/usr/local/bin/pulse`
+- Set up necessary permissions
+
 ### From Binary
 
+<details>
 Download the latest release for your architecture:
 
 ```bash
@@ -35,65 +51,30 @@ Download the latest release for your architecture:
 wget https://github.com/node-pulse/agent/releases/latest/download/pulse-linux-amd64.tar.gz
 tar -xzf pulse-linux-amd64.tar.gz
 sudo mv pulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/pulse
 
 # For arm64
 wget https://github.com/node-pulse/agent/releases/latest/download/pulse-linux-arm64.tar.gz
 tar -xzf pulse-linux-arm64.tar.gz
 sudo mv pulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/pulse
 ```
 
+</details>
+
 ### From Source
+
+<details>
 
 ```bash
 git clone https://github.com/node-pulse/agent.git
 cd agent
 go build -o pulse
 sudo mv pulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/pulse
 ```
 
-## Configuration
-
-Create a configuration file at `/etc/node-pulse/nodepulse.yml`:
-
-```yaml
-server:
-  endpoint: "https://api.nodepulse.io/metrics"
-  timeout: 3s
-
-agent:
-  server_id: "your-unique-uuid-here" # Required: UUID to identify this server
-  interval: 5s # Options: 5s, 10s, 30s, 1m
-
-buffer:
-  enabled: true
-  path: "/var/lib/node-pulse/buffer"
-  retention_hours: 48
-```
-
-**Server ID Generation & Persistence**:
-
-The server ID uniquely identifies your server in the NodePulse system. The agent handles this automatically:
-
-- If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
-- The generated UUID is automatically persisted to disk at the first writable location (in order):
-  1. `/var/lib/node-pulse/server_id` (preferred for system-wide installations)
-  2. `/etc/node-pulse/server_id` (alternative system location)
-  3. `~/.node-pulse/server_id` (user home directory)
-  4. `./server_id` (fallback to current directory)
-- The same UUID will be reused on subsequent runs, even if you don't set it in the config
-- The persisted ID takes precedence over the config file to maintain consistency
-- You can check where your server ID is stored with: `pulse status`
-- You can also manually set a UUID in the config if you prefer:
-  - Linux/Mac: `uuidgen`
-  - PowerShell: `New-Guid`
-
-Or use the included `nodepulse.yml` as a template:
-
-```bash
-sudo mkdir -p /etc/node-pulse
-sudo cp nodepulse.yml /etc/node-pulse/
-sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
-```
+</details>
 
 ## Usage
 
@@ -104,6 +85,7 @@ sudo pulse setup
 ```
 
 Interactive setup wizard that:
+
 - Creates necessary directories (`/etc/node-pulse`, `/var/lib/node-pulse`)
 - Generates and persists server ID
 - Creates configuration file with your settings
@@ -189,6 +171,84 @@ sudo pulse service restart
 
 ```bash
 sudo pulse service uninstall
+```
+
+## Configuration
+
+Create a configuration file at `/etc/node-pulse/nodepulse.yml`:
+
+```yaml
+server:
+  endpoint: "https://api.nodepulse.io/metrics"
+  timeout: 3s
+
+agent:
+  server_id: "your-unique-uuid-here" # Required: UUID to identify this server
+  interval: 5s # Options: 5s, 10s, 30s, 1m
+
+buffer:
+  enabled: true
+  path: "/var/lib/node-pulse/buffer"
+  retention_hours: 48
+
+logging:
+  level: "info" # Options: debug, info, warn, error
+  output: "stdout" # Options: stdout, file, both
+  file:
+    path: "/var/log/node-pulse/agent.log"
+    max_size_mb: 10
+    max_backups: 3
+    max_age_days: 7
+    compress: true
+```
+
+### Logging Configuration:
+
+The agent supports flexible logging with the following options:
+
+- **level**: Set log verbosity (`debug`, `info`, `warn`, `error`)
+
+  - `debug`: Verbose diagnostic information for troubleshooting
+  - `info`: General informational messages about normal operation (default)
+  - `warn`: Potentially harmful situations that don't prevent operation
+  - `error`: Error events that might still allow operation to continue
+
+- **output**: Choose where logs are written (`stdout`, `file`, `both`)
+
+  - `stdout`: Output to console/terminal (default, recommended for systemd)
+  - `file`: Write to log file with automatic rotation
+  - `both`: Output to both console and file
+
+- **file**: Log file rotation settings (applies when output is `file` or `both`)
+  - `path`: Location of the log file
+  - `max_size_mb`: Maximum size in MB before rotating (default: 10)
+  - `max_backups`: Maximum number of old log files to keep (default: 3)
+  - `max_age_days`: Maximum age in days for old log files (default: 7)
+  - `compress`: Compress rotated logs with gzip (default: true)
+
+### Server ID Generation & Persistence:
+
+The server ID uniquely identifies your server in the NodePulse system. The agent handles this automatically:
+
+- If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
+- The generated UUID is automatically persisted to disk at the first writable location (in order):
+  1. `/var/lib/node-pulse/server_id` (preferred for system-wide installations)
+  2. `/etc/node-pulse/server_id` (alternative system location)
+  3. `~/.node-pulse/server_id` (user home directory)
+  4. `./server_id` (fallback to current directory)
+- The same UUID will be reused on subsequent runs, even if you don't set it in the config
+- The persisted ID takes precedence over the config file to maintain consistency
+- You can check where your server ID is stored with: `pulse status`
+- You can also manually set a UUID in the config if you prefer:
+  - Linux/Mac: `uuidgen`
+  - PowerShell: `New-Guid`
+
+Or use the included `nodepulse.yml` as a template:
+
+```bash
+sudo mkdir -p /etc/node-pulse
+sudo cp nodepulse.yml /etc/node-pulse/
+sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
 ```
 
 ## Metrics Collected
