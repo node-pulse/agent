@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/node-pulse/agent/cmd/themes"
 	"github.com/node-pulse/agent/internal/installer"
 )
 
@@ -174,7 +173,7 @@ func (m initTUIModel) View() string {
 	if m.quitting {
 		if m.err != nil {
 			return lipgloss.NewStyle().
-				Foreground(themes.Current.Error).
+				Foreground(theme.Error).
 				Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 		}
 		return ""
@@ -228,12 +227,12 @@ func (m initTUIModel) viewSplash() string {
 `
 
 	logoStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		Align(lipgloss.Center)
 
 	taglineStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Align(lipgloss.Center).
 		Italic(true).
 		MarginTop(2)
@@ -257,7 +256,7 @@ func (m initTUIModel) viewChecking() string {
 `
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
@@ -273,17 +272,17 @@ func (m initTUIModel) viewChecking() string {
 		var line string
 		if i < m.checkingStep {
 			// Completed
-			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
-			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			checkStyle := lipgloss.NewStyle().Foreground(theme.Success)
+			textStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 			line = checkStyle.Render("✓ ") + textStyle.Render(step)
 		} else if i == m.checkingStep {
 			// In progress
-			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
-			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			spinStyle := lipgloss.NewStyle().Foreground(theme.Accent)
+			textStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 			line = spinStyle.Render("⟳ ") + textStyle.Render(step+"...")
 		} else {
 			// Pending
-			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary).Faint(true)
+			pendingStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary).Faint(true)
 			line = pendingStyle.Render("○ " + step)
 		}
 		b.WriteString(contentStyle.Render(line) + "\n")
@@ -302,12 +301,12 @@ func (m initTUIModel) viewWelcome() string {
 `
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	contentStyle := lipgloss.NewStyle().
 		Padding(0, 4)
@@ -332,7 +331,7 @@ func (m initTUIModel) viewWelcome() string {
 
 	if m.existing != nil && (m.existing.HasConfig || m.existing.HasServerID) {
 		warningStyle := lipgloss.NewStyle().
-			Foreground(themes.Current.Warning).
+			Foreground(theme.Warning).
 			Bold(true)
 
 		b.WriteString(contentStyle.Render(warningStyle.Render("⚠ Existing installation detected")))
@@ -350,7 +349,7 @@ func (m initTUIModel) viewWelcome() string {
 	}
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	b.WriteString(contentStyle.Render(helpStyle.Render("Press Enter to continue • Esc to exit")))
@@ -360,15 +359,15 @@ func (m initTUIModel) viewWelcome() string {
 
 func (m initTUIModel) viewEndpoint() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -390,7 +389,7 @@ func (m initTUIModel) viewEndpoint() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -405,15 +404,15 @@ func (m initTUIModel) viewEndpoint() string {
 
 func (m initTUIModel) viewServerID() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -436,7 +435,7 @@ func (m initTUIModel) viewServerID() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -453,15 +452,15 @@ func (m initTUIModel) viewServerID() string {
 
 func (m initTUIModel) viewInterval() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -479,7 +478,7 @@ func (m initTUIModel) viewInterval() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -494,15 +493,15 @@ func (m initTUIModel) viewInterval() string {
 
 func (m initTUIModel) viewTimeout() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -520,7 +519,7 @@ func (m initTUIModel) viewTimeout() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -535,15 +534,15 @@ func (m initTUIModel) viewTimeout() string {
 
 func (m initTUIModel) viewBuffer() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -563,7 +562,7 @@ func (m initTUIModel) viewBuffer() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -578,15 +577,15 @@ func (m initTUIModel) viewBuffer() string {
 
 func (m initTUIModel) viewLogging() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -604,7 +603,7 @@ func (m initTUIModel) viewLogging() string {
 	b.WriteString("\n\n")
 
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(themes.Current.Error)
+		errorStyle := lipgloss.NewStyle().Foreground(theme.Error)
 		b.WriteString(contentStyle.Render(errorStyle.Render(fmt.Sprintf("❌ %v", m.err))))
 		b.WriteString("\n\n")
 	}
@@ -625,27 +624,27 @@ func (m initTUIModel) viewLogging() string {
 
 func (m initTUIModel) viewReview() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true).
 		Width(18)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(themes.Current.Accent).
+		BorderForeground(theme.Accent).
 		Padding(2, 3).
 		MarginTop(0).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().
@@ -680,7 +679,7 @@ func (m initTUIModel) viewReview() string {
 
 func (m initTUIModel) viewInstalling() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Accent).
+		Foreground(theme.Accent).
 		Bold(true).
 		MarginBottom(1)
 
@@ -696,17 +695,17 @@ func (m initTUIModel) viewInstalling() string {
 		var line string
 		if i < m.installStep {
 			// Completed
-			checkStyle := lipgloss.NewStyle().Foreground(themes.Current.Success)
-			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			checkStyle := lipgloss.NewStyle().Foreground(theme.Success)
+			textStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 			line = checkStyle.Render("✓ ") + textStyle.Render(step)
 		} else if i == m.installStep {
 			// In progress
-			spinStyle := lipgloss.NewStyle().Foreground(themes.Current.Accent)
-			textStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary)
+			spinStyle := lipgloss.NewStyle().Foreground(theme.Accent)
+			textStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 			line = spinStyle.Render("⟳ ") + textStyle.Render(step+"...")
 		} else {
 			// Pending
-			pendingStyle := lipgloss.NewStyle().Foreground(themes.Current.TextPrimary).Faint(true)
+			pendingStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary).Faint(true)
 			line = pendingStyle.Render("○ " + step)
 		}
 		b.WriteString(contentStyle.Render(line) + "\n")
@@ -717,31 +716,31 @@ func (m initTUIModel) viewInstalling() string {
 
 func (m initTUIModel) viewSuccess() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.Success).
+		Foreground(theme.Success).
 		Bold(true).
 		MarginBottom(1)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary)
+		Foreground(theme.TextPrimary)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true).
 		Width(12)
 
 	valueStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Bold(true)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(themes.Current.Success).
+		BorderForeground(theme.Success).
 		Padding(2, 3).
 		MarginTop(0).
 		MarginBottom(1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(themes.Current.TextPrimary).
+		Foreground(theme.TextPrimary).
 		Faint(true)
 
 	contentStyle := lipgloss.NewStyle().

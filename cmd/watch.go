@@ -13,15 +13,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/node-pulse/agent/cmd/themes"
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/metrics"
 	"github.com/node-pulse/agent/internal/report"
 	"github.com/spf13/cobra"
 )
-
-// Get theme for easy access
-var theme = themes.Current
 
 // watchCmd represents the watch command
 var watchCmd = &cobra.Command{
@@ -191,7 +187,7 @@ func (m model) renderDashboard() string {
  ╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝    ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝`
 
 	title := lipgloss.NewStyle().
-		Foreground(theme.Primary).
+		Foreground(theme.Accent).
 		Render(logo)
 
 	// Error handling
