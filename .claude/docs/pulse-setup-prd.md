@@ -1,4 +1,4 @@
-# PRD: `pulse init` Command
+# PRD: `pulse setup` Command
 
 ## Overview
 
@@ -12,16 +12,18 @@ Create an idempotent initialization command that automates the setup of NodePuls
   - Installation script: `curl -L https://get.nodepulse.sh | sudo bash` (planned for future)
 - Root/sudo access is required to create system directories and config files
 
-**Note**: Binary installation is out of scope for this command. `pulse init` only handles configuration and setup after the binary is already installed.
+**Note**: Binary installation is out of scope for this command. `pulse setup` only handles configuration and setup after the binary is already installed.
 
 ## Motivation
 
 Currently, after installing the binary, setting up the agent requires manual steps:
+
 1. Creating multiple directories (`/etc/node-pulse/`, `/var/lib/node-pulse/buffer/`)
 2. Manually creating and editing the config file
 3. Handling server ID generation and persistence
 
 This manual process is:
+
 - Error-prone
 - Not idempotent (can't safely re-run)
 - Difficult to automate
@@ -39,7 +41,7 @@ This manual process is:
 ## Command Signature
 
 ```bash
-pulse init [--yes|-y]
+pulse setup [--yes|-y]
 ```
 
 ### Flags
@@ -55,12 +57,14 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
 #### Screens/Steps:
 
 1. **Welcome Screen**
+
    - Show NodePulse logo/title
-   - Brief description of what init will do
+   - Brief description of what setup will do
    - Permission check (warn if not root/sudo)
    - "Press Enter to continue"
 
 2. **Existing Installation Detection**
+
    - Check if config exists
    - Check if server_id exists
    - If found, show current settings and ask:
@@ -69,12 +73,14 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
      - "Cancel"
 
 3. **Endpoint Configuration**
+
    - Text input field with validation
    - Example: `https://api.nodepulse.io/metrics`
    - Real-time validation (URL format check)
    - Help text: "Enter the metrics endpoint URL for your control server"
 
 4. **Server ID Configuration**
+
    - Check if server_id file exists
    - If exists:
      - Show: "Found existing server ID: `xxxx-xxxx-xxxx`"
@@ -93,12 +99,14 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
    - Help text: "A unique identifier for this server. Can be any name like 'prod-web-01' or leave empty to generate a UUID."
 
 5. **Interval Selection**
+
    - Radio button / dropdown selection
    - Options: 5s, 10s, 30s, 1m
    - Default: 5s
    - Help text: "How often to collect and send metrics"
 
 6. **Buffer Settings**
+
    - Toggle: Enable buffering (default: yes)
    - If enabled:
      - Path input (default: /var/lib/node-pulse/buffer)
@@ -106,11 +114,13 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
    - Help text: "Buffer failed reports for retry when server is unavailable"
 
 7. **Advanced Settings (Optional)**
+
    - Collapsible/expandable section
    - Server timeout (default: 3s)
    - Custom config file path
 
 8. **Review & Confirm**
+
    - Show all settings in a formatted view:
      ```
      Configuration Summary
@@ -128,6 +138,7 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
    - Buttons: "Confirm" or "Back to edit"
 
 9. **Installation Progress**
+
    - Show progress steps with spinners/checkmarks:
      ```
      ✓ Checking permissions
@@ -141,8 +152,10 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
      ```
 
 10. **Success Screen**
+
     - Success message with checkmark
     - Show summary:
+
       ```
       ✓ NodePulse agent initialized successfully!
 
@@ -154,6 +167,7 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
         2. Watch live metrics: pulse watch
         3. Install service:    sudo pulse service install
       ```
+
     - Optional: Ask "Install as systemd service now? [y/N]"
 
 ### 2. Quick Mode (`--yes` or `-y`)
@@ -181,14 +195,14 @@ Streamlined setup with minimal prompts.
 
 ```bash
 # Auto-generate UUID
-sudo pulse init --yes
+sudo pulse setup --yes
 # Prompts:
 #   Enter endpoint URL: https://api.nodepulse.io/metrics
 #   Enter server ID (leave empty to auto-generate UUID): [Enter]
 # Generates UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 # Use custom server ID
-sudo pulse init --yes
+sudo pulse setup --yes
 # Prompts:
 #   Enter endpoint URL: https://api.nodepulse.io/metrics
 #   Enter server ID (leave empty to auto-generate UUID): prod-web-01
@@ -202,19 +216,22 @@ The command must be safe to run multiple times.
 #### Detection Logic:
 
 1. **Config file exists**:
+
    - Interactive: Ask to reconfigure or repair
    - Quick mode: Update endpoint only, keep other settings
 
 2. **Directories exist**:
+
    - Skip creation
    - Verify permissions, fix if needed
 
 3. **Server ID exists**:
+
    - Always keep existing
    - Show which ID is being used
 
 4. **Binary already in place**:
-   - Not init's responsibility (manual or install script)
+   - Not setup's responsibility (manual or install script)
 
 #### Output Messages:
 
@@ -228,11 +245,13 @@ The command must be safe to run multiple times.
 ## Setup Tasks (In Order)
 
 1. **Permission Check**
+
    - Verify running as root or with sudo
    - Check write access to `/etc/` and `/var/lib/`
    - Error if insufficient permissions
 
 2. **Directory Creation**
+
    - Create `/etc/node-pulse/` (mode: 0755)
    - Create `/var/lib/node-pulse/` (mode: 0755)
    - Create `/var/lib/node-pulse/buffer/` (mode: 0755)
@@ -240,6 +259,7 @@ The command must be safe to run multiple times.
    - Verify/fix permissions if exists
 
 3. **Server ID Management**
+
    - Check for existing server_id at standard paths:
      - `/var/lib/node-pulse/server_id`
      - `/etc/node-pulse/server_id`
@@ -262,12 +282,14 @@ The command must be safe to run multiple times.
    - Display final server ID to user
 
 4. **Configuration File**
+
    - Generate YAML config from user input or defaults
    - Write to `/etc/node-pulse/nodepulse.yml` (mode: 0644)
    - If file exists:
      - Interactive: show diff, ask to overwrite
      - Quick mode: update endpoint only, preserve other customizations
    - Format example:
+
      ```yaml
      server:
        endpoint: "https://api.nodepulse.io/metrics"
@@ -284,6 +306,7 @@ The command must be safe to run multiple times.
      ```
 
 5. **Validation**
+
    - Load the written config using existing `config.Load()`
    - Verify all required fields present
    - Validate formats:
@@ -299,21 +322,23 @@ The command must be safe to run multiple times.
 
 6. **Optional: Systemd Service**
    - At the end, ask user: "Install as systemd service now? [y/N]"
-   - If confirmed, run `pulse service install` internally
+   - If confirmed, run `pulse service setup` internally
    - Report success/failure
 
 ## Implementation Structure
 
 ### New Files
 
-#### `cmd/init.go`
-- Cobra command definition
+#### `cmd/setup.go`
+
+- Cobra command definition for 'setup' command
 - Flag parsing
 - Mode selection (interactive vs non-interactive)
 - TUI setup and event loop (Bubble Tea)
 - Orchestrate installer calls
 
 #### `internal/installer/installer.go`
+
 - Core installation functions
 - Idempotency logic
 - File system operations
@@ -321,7 +346,8 @@ The command must be safe to run multiple times.
 
 ### Functions Needed
 
-#### `cmd/init.go`
+#### `cmd/setup.go`
+
 ```go
 func runInit(cmd *cobra.Command, args []string) error
 func runInteractive() error
@@ -335,6 +361,7 @@ func (m initModel) View() string
 ```
 
 #### `internal/installer/installer.go`
+
 ```go
 type InstallConfig struct {
     Endpoint string // Required: metrics endpoint URL
@@ -360,6 +387,7 @@ func FixPermissions() error
 ### Code Changes Required
 
 Update `internal/config/config.go`:
+
 ```go
 // Change from:
 func isValidUUID(u string) bool {
@@ -406,14 +434,17 @@ func isAlphanumeric(c rune) bool {
 ## Edge Cases & Error Handling
 
 1. **No sudo/root**:
+
    - Error immediately: "This command requires root privileges. Run with sudo."
 
 2. **Invalid endpoint URL**:
+
    - Validate format (must be http:// or https://)
    - Interactive: Show error, allow re-entry
    - Quick mode: Show error, allow re-entry
 
 3. **Invalid server ID format**:
+
    - Must contain only alphanumeric characters (a-z, A-Z, 0-9) and dashes (-)
    - Must start and end with alphanumeric character (not dash)
    - Cannot contain spaces
@@ -422,19 +453,23 @@ func isAlphanumeric(c rune) bool {
    - Allow re-entry or option to auto-generate UUID
 
 4. **Directory creation fails**:
+
    - Show clear error: "Failed to create /etc/node-pulse/: permission denied"
    - Suggest solution: "Ensure you're running with sudo"
 
 5. **Config file locked/in use**:
+
    - Detect if agent is running
    - Warn: "Agent may be running. Stop it first with: pulse service stop"
 
 6. **Partial installation**:
+
    - If init fails midway, allow re-running
    - Don't leave system in broken state
    - Rollback on critical failures
 
 7. **Invalid existing server_id file**:
+
    - Warn: "Found invalid server_id file, will generate new one"
    - Backup old file: `server_id.bak`
 
@@ -473,6 +508,7 @@ func isAlphanumeric(c rune) bool {
 ### Automated Testing
 
 Unit tests for:
+
 - `installer.DetectExisting()`
 - `installer.WriteConfigFile()`
 - `installer.HandleServerID()` - test with valid custom ID, invalid characters, empty string
@@ -502,7 +538,7 @@ Unit tests for:
 
 Add section after "Installation":
 
-```markdown
+````markdown
 ## Quick Start
 
 ### Initialize the Agent
@@ -510,20 +546,21 @@ Add section after "Installation":
 Run the interactive setup wizard (recommended for first-time setup):
 
 ```bash
-sudo pulse init
+sudo pulse setup
 ```
+````
 
 Or use quick mode (minimal prompts, uses defaults):
 
 ```bash
-sudo pulse init --yes
+sudo pulse setup --yes
 # Prompts:
 #   Enter endpoint URL: https://api.nodepulse.io/metrics
 #   Enter server ID (leave empty to auto-generate UUID): [press Enter]
 # Auto-generates UUID and completes setup
 
 # Or with custom server ID:
-sudo pulse init --yes
+sudo pulse setup --yes
 # Prompts:
 #   Enter endpoint URL: https://api.nodepulse.io/metrics
 #   Enter server ID (leave empty to auto-generate UUID): prod-web-server-01
@@ -531,6 +568,7 @@ sudo pulse init --yes
 ```
 
 This will:
+
 - Create necessary directories
 - Use custom server ID or generate UUID
 - Create the configuration file
@@ -546,6 +584,7 @@ pulse agent
 sudo pulse service install
 sudo pulse service start
 ```
+
 ```
 
 ## Success Metrics
@@ -564,10 +603,11 @@ sudo pulse service start
 
 ## Future Enhancements (Out of Scope)
 
-- **One-line installation script** (`curl -L https://get.nodepulse.sh | sudo bash`): Download, extract, and install the binary, then optionally run `pulse init`
+- **One-line installation script** (`curl -L https://get.nodepulse.sh | sudo bash`): Download, extract, and install the binary, then optionally run `pulse setup`
 - Auto-detect if running in Docker/container
 - Support for Windows (PowerShell equivalent)
 - Cloud provider metadata integration (AWS, GCP, Azure instance IDs)
 - Config templates for different use cases
 - Remote configuration pull from control server
 - Wizard to create endpoint if user doesn't have one yet
+```

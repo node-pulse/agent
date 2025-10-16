@@ -100,7 +100,7 @@ sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
 ### Initialize Configuration (First Time Setup)
 
 ```bash
-sudo pulse init
+sudo pulse setup
 ```
 
 Interactive setup wizard that:

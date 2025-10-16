@@ -21,7 +21,7 @@ agent/
 ├── cmd/
 │   ├── root.go           # Cobra root command
 │   ├── agent.go          # Agent command (runs monitoring)
-│   ├── init.go           # Interactive setup wizard
+│   ├── setup.go          # Interactive setup wizard
 │   ├── watch.go          # TUI watch command (Bubbletea interface)
 │   ├── status.go         # Status command (shows server ID, config, service, buffer, logs)
 │   └── service.go        # Service management (install/start/stop/restart/status/uninstall)
@@ -49,6 +49,7 @@ agent/
 4. **Uptime**: How many days the server has been running
 
 **Collection source**: Linux `/proc` filesystem
+
 - `/proc/stat` - CPU stats
 - `/proc/meminfo` - Memory stats
 - `/proc/net/dev` - Network I/O stats
@@ -57,11 +58,13 @@ agent/
 ## Reporting Configuration
 
 ### Intervals
+
 - Default: **5 seconds**
 - Allowed: 5s, 10s, 30s, 1min
 - (1s is too aggressive, not recommended)
 
 ### HTTP Reporting
+
 - Protocol: HTTP POST
 - Format: JSON
 - Timeout: **3 seconds** (default)
@@ -73,18 +76,21 @@ agent/
 Each agent instance requires a unique `server_id` to identify which server is reporting.
 
 **Auto-generation behavior:**
+
 1. If config has valid UUID (not placeholder) → Use it
 2. If persisted file exists → Load it
 3. Otherwise → Generate new UUID and save to persistent file
 
 **Persistence locations** (tried in order):
-- `/var/lib/node-pulse/server_id` ✅ (survives re-init, not OS reinstall)
+
+- `/var/lib/node-pulse/server_id` ✅ (survives re-setup, not OS reinstall)
 - `/etc/node-pulse/server_id`
 - `~/.node-pulse/server_id`
 - `./server_id` (fallback)
 
 **Stability:**
-- UUID persists across project re-initialization
+
+- UUID persists across project re-setup
 - UUID is regenerated only after OS reinstall (when persistent file is wiped)
 - Check current UUID: `pulse status`
 
@@ -113,11 +119,13 @@ When HTTP send fails or times out:
 ### Collection Failures
 
 If a **single metric** fails to collect (e.g., can't read `/proc/stat`):
+
 - Log the error
 - Set that metric to `null` in JSON
 - Still send the report with other valid metrics
 
 If **ALL metrics** fail (e.g., `/proc` not accessible):
+
 - Log critical error
 - Skip this cycle entirely
 - Keep trying next cycle
@@ -129,28 +137,30 @@ If **ALL metrics** fail (e.g., `/proc` not accessible):
 ```yaml
 server:
   endpoint: "https://your-server.com/api/metrics"
-  timeout: 3s  # Default 3 seconds
+  timeout: 3s # Default 3 seconds
 
 agent:
-  interval: 5s  # 5s, 10s, 30s, 1m
+  interval: 5s # 5s, 10s, 30s, 1m
 
 buffer:
   enabled: true
   path: "/var/lib/node-pulse/buffer"
-  retention_hours: 48  # Keep 48 hours max
+  retention_hours: 48 # Keep 48 hours max
 ```
 
 ## CLI Commands
 
 ### Core Commands
+
 ```bash
-pulse init                   # Interactive setup wizard (creates config, generates server ID)
+pulse setup                  # Interactive setup wizard (creates config, generates server ID)
 pulse agent                  # Run agent in foreground (for testing)
 pulse watch                  # Launch TUI to see live metrics (Bubbletea)
 pulse status                 # Display comprehensive status (server ID, config, service, buffer, logs)
 ```
 
 ### Service Management (No systemd knowledge required)
+
 ```bash
 pulse service install        # Install systemd service
 pulse service start          # Start the service
@@ -182,10 +192,12 @@ WantedBy=multi-user.target
 ## Build & Release
 
 ### Build Targets
+
 - Binaries output to `build/` directory (manual builds)
 - Binaries output to `dist/` directory (goreleaser)
 
 ### Using Makefile
+
 ```bash
 # Build for current platform
 make build
@@ -198,6 +210,7 @@ make release
 ```
 
 ### Using GoReleaser directly
+
 ```bash
 goreleaser release --snapshot --clean
 ```
@@ -227,6 +240,7 @@ goreleaser release --snapshot --clean
 ```
 
 If a metric fails to collect, it will be `null`:
+
 ```json
 {
   "timestamp": "2025-10-13T14:30:00Z",

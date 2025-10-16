@@ -15,28 +15,28 @@ var (
 	quickMode bool
 )
 
-// initCmd represents the init command
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize NodePulse agent configuration",
-	Long: `Initialize the NodePulse agent by creating necessary directories,
+// setupCmd represents the setup command
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Set up Node Pulse agent configuration",
+	Long: `Set up the Node Pulse agent by creating necessary directories,
 generating server ID, and creating configuration file.
 
 Run interactively with the full setup wizard, or use --yes for quick mode
 with minimal prompts.`,
-	RunE: runInit,
+	RunE: runSetup,
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd)
-	initCmd.Flags().BoolVarP(&quickMode, "yes", "y", false, "Quick mode - minimal prompts, use defaults")
+	rootCmd.AddCommand(setupCmd)
+	setupCmd.Flags().BoolVarP(&quickMode, "yes", "y", false, "Quick mode - minimal prompts, use defaults")
 }
 
-func runInit(cmd *cobra.Command, args []string) error {
+func runSetup(cmd *cobra.Command, args []string) error {
 	// Run appropriate mode
 	if quickMode {
 		// Quick mode: run checks before prompts
-		fmt.Println("⚡ NodePulse Agent Initialization")
+		fmt.Println("⚡ Node Pulse Agent Setup")
 		fmt.Println()
 
 		// Check permissions
@@ -161,7 +161,7 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 func runInteractive() error {
 	// Run TUI wizard - it handles all checks internally
 	p := tea.NewProgram(
-		newInitTUIModel(),
+		newSetupTUIModel(),
 		tea.WithAltScreen(),
 	)
 
@@ -220,7 +220,7 @@ func performInstallation(opts installer.ConfigOptions) error {
 
 	// Success
 	fmt.Println()
-	fmt.Println("✓ NodePulse agent initialized successfully!")
+	fmt.Println("✓ Node Pulse agent set up successfully!")
 	fmt.Println()
 	fmt.Println("Server ID:")
 	fmt.Printf("  %s\n", opts.ServerID)

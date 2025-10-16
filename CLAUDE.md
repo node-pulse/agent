@@ -57,7 +57,7 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
 - **cmd/agent.go**: Main agent loop - collects metrics at configured intervals and sends to server
 - **cmd/watch.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
 - **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
-- **cmd/init.go**: Interactive setup wizard for first-time configuration
+- **cmd/setup.go**: Interactive setup wizard for first-time configuration (command: `pulse setup`)
 - **cmd/status.go**: Shows comprehensive agent status including server ID, config, service status, buffer state, and logs
 
 ### Metrics Collection (internal/metrics/)

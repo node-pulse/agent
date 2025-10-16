@@ -29,8 +29,8 @@ const (
 	ScreenSuccess
 )
 
-// initTUIModel represents the state of the TUI wizard
-type initTUIModel struct {
+// setupTUIModel represents the state of the TUI wizard
+type setupTUIModel struct {
 	screen          Screen
 	width           int
 	height          int
@@ -63,14 +63,14 @@ type installCompleteMsg struct {
 	config installer.ConfigOptions
 }
 
-// newInitTUIModel creates a new TUI model
-func newInitTUIModel() initTUIModel {
+// newSetupTUIModel creates a new TUI model
+func newSetupTUIModel() setupTUIModel {
 	ti := textinput.New()
 	ti.Placeholder = "https://ingest.nodepulse.sh"
 	ti.Focus()
 	ti.Width = 60
 
-	return initTUIModel{
+	return setupTUIModel{
 		screen:    ScreenSplash,
 		config:    installer.DefaultConfigOptions(),
 		textInput: ti,
@@ -88,7 +88,7 @@ func newInitTUIModel() initTUIModel {
 	}
 }
 
-func (m initTUIModel) Init() tea.Cmd {
+func (m setupTUIModel) Init() tea.Cmd {
 	// Start with splash screen for 1500ms
 	return func() tea.Msg {
 		time.Sleep(1500 * time.Millisecond)
@@ -96,7 +96,7 @@ func (m initTUIModel) Init() tea.Cmd {
 	}
 }
 
-func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m setupTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -169,7 +169,7 @@ func (m initTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m initTUIModel) View() string {
+func (m setupTUIModel) View() string {
 	if m.quitting {
 		if m.err != nil {
 			return lipgloss.NewStyle().
@@ -209,7 +209,7 @@ func (m initTUIModel) View() string {
 	}
 }
 
-func (m initTUIModel) viewSplash() string {
+func (m setupTUIModel) viewSplash() string {
 	logo := `
 ███╗   ██╗ ██████╗ ██████╗ ███████╗
 ████╗  ██║██╔═══██╗██╔══██╗██╔════╝
@@ -246,11 +246,11 @@ func (m initTUIModel) viewSplash() string {
 	)
 }
 
-func (m initTUIModel) viewChecking() string {
+func (m setupTUIModel) viewChecking() string {
 	title := `
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║      ⚡ NodePulse Agent Initialization                     ║
+║      ⚡ Node Pulse Agent Setup                             ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `
@@ -291,11 +291,11 @@ func (m initTUIModel) viewChecking() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewWelcome() string {
+func (m setupTUIModel) viewWelcome() string {
 	title := `
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║      ⚡ NodePulse Agent Initialization                    ║
+║      ⚡ Node Pulse Agent Setup                             ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `
@@ -316,7 +316,7 @@ func (m initTUIModel) viewWelcome() string {
 	b.WriteString(titleStyle.Render(title))
 	b.WriteString("\n")
 
-	b.WriteString(contentStyle.Render(textStyle.Render("This wizard will help you set up the NodePulse agent.")))
+	b.WriteString(contentStyle.Render(textStyle.Render("This wizard will help you set up the Node Pulse agent.")))
 	b.WriteString("\n\n")
 	b.WriteString(contentStyle.Render(textStyle.Render("It will:")))
 	b.WriteString("\n\n")
@@ -357,7 +357,7 @@ func (m initTUIModel) viewWelcome() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewEndpoint() string {
+func (m setupTUIModel) viewEndpoint() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -402,7 +402,7 @@ func (m initTUIModel) viewEndpoint() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewServerID() string {
+func (m setupTUIModel) viewServerID() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -450,7 +450,7 @@ func (m initTUIModel) viewServerID() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewInterval() string {
+func (m setupTUIModel) viewInterval() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -491,7 +491,7 @@ func (m initTUIModel) viewInterval() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewTimeout() string {
+func (m setupTUIModel) viewTimeout() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -532,7 +532,7 @@ func (m initTUIModel) viewTimeout() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewBuffer() string {
+func (m setupTUIModel) viewBuffer() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -575,7 +575,7 @@ func (m initTUIModel) viewBuffer() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewLogging() string {
+func (m setupTUIModel) viewLogging() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -622,7 +622,7 @@ func (m initTUIModel) viewLogging() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewReview() string {
+func (m setupTUIModel) viewReview() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -677,7 +677,7 @@ func (m initTUIModel) viewReview() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewInstalling() string {
+func (m setupTUIModel) viewInstalling() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true).
@@ -714,7 +714,7 @@ func (m initTUIModel) viewInstalling() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) viewSuccess() string {
+func (m setupTUIModel) viewSuccess() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Success).
 		Bold(true).
@@ -748,7 +748,7 @@ func (m initTUIModel) viewSuccess() string {
 
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("✓ Node Pulse agent initialized successfully!"))
+	b.WriteString(titleStyle.Render("✓ Node Pulse agent set up successfully!"))
 	b.WriteString("\n")
 
 	// Summary box
@@ -773,7 +773,7 @@ func (m initTUIModel) viewSuccess() string {
 	return lipgloss.NewStyle().Padding(2, 4).Render(b.String())
 }
 
-func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
+func (m setupTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case ScreenWelcome:
 		// Move to endpoint screen
@@ -942,7 +942,7 @@ func (m initTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m initTUIModel) runInstallStep(step int) tea.Cmd {
+func (m setupTUIModel) runInstallStep(step int) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 
@@ -967,7 +967,7 @@ func (m initTUIModel) runInstallStep(step int) tea.Cmd {
 	}
 }
 
-func (m initTUIModel) runCheckStep(step int) tea.Cmd {
+func (m setupTUIModel) runCheckStep(step int) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 		var existing *installer.ExistingInstall
