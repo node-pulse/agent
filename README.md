@@ -96,7 +96,7 @@ Use `--yes` flag for quick mode with defaults.
 ### Run Agent in Foreground
 
 ```bash
-pulse agent
+pulse start
 ```
 
 ### Watch Live Metrics
@@ -392,7 +392,7 @@ make build-linux-arm64
 - **OS**: Linux (uses `/proc` filesystem)
 - **Architectures**: amd64, arm64
 - **Permissions**:
-  - Normal user for `pulse agent` and `pulse watch`
+  - Normal user for `pulse start` and `pulse watch`
   - Root (sudo) for `pulse service` commands
 
 ## Development
@@ -429,11 +429,11 @@ The agent needs to run on a Linux system to collect metrics. You can test locall
 
 ```bash
 # Run directly with go
-go run . agent
+go run . start
 
 # Or build and run
 make build
-./build/pulse agent
+./build/pulse start
 ```
 
 View metrics in another terminal:

@@ -163,7 +163,7 @@ When run without `--yes`, launch a beautiful TUI wizard using Bubble Tea.
       Config:     /etc/node-pulse/nodepulse.yml
 
       Next steps:
-        1. Start the agent:    pulse agent
+        1. Start the agent:    pulse start
         2. Watch live metrics: pulse watch
         3. Install service:    sudo pulse service install
       ```
@@ -578,7 +578,7 @@ This will:
 
 ```bash
 # Run in foreground
-pulse agent
+pulse start
 
 # Or install as a service
 sudo pulse service install

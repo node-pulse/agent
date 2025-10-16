@@ -37,7 +37,7 @@ install: build
 
 # Run in development mode
 dev: build
-	$(BUILD_DIR)/$(BINARY_NAME) agent
+	$(BUILD_DIR)/$(BINARY_NAME) start
 
 # Build release with goreleaser
 release:

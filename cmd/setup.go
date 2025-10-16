@@ -228,7 +228,7 @@ func performInstallation(opts installer.ConfigOptions) error {
 	fmt.Printf("  %s\n", installer.DefaultConfigPath)
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Start the agent:    pulse agent")
+	fmt.Println("  1. Start the agent:    pulse start")
 	fmt.Println("  2. Watch live metrics: pulse watch")
 	fmt.Println("  3. Install service:    sudo pulse service install")
 	fmt.Println()

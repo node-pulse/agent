@@ -39,7 +39,7 @@ make lint
 make dev
 
 # Run directly with go
-go run . agent
+go run . start
 ```
 
 ### Dependencies
@@ -116,7 +116,7 @@ Tracks hourly statistics for the dashboard:
 - Total upload/download bytes
 - Stats reset each hour automatically
 
-## Agent Main Loop (cmd/agent.go)
+## Agent Main Loop (cmd/start.go)
 
 1. Load configuration
 2. Initialize logger
@@ -147,7 +147,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipglos
 - **Linux-only**: All metrics depend on `/proc` filesystem
 - **Architectures**: Built for amd64 and arm64 only
 - **Permissions**:
-  - Regular user can run `pulse agent` and `pulse watch`
+  - Regular user can run `pulse start` and `pulse watch`
   - Root required for `pulse service` commands and writing to `/etc` and `/var`
 
 ## Testing Notes
@@ -155,7 +155,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipglos
 Since the agent relies on Linux `/proc` files, development/testing should be done on a Linux system or VM. The TUI watch command is helpful for visual verification during development.
 
 To test the full flow locally:
-1. Run `make dev` or `go run . agent` in one terminal
+1. Run `make dev` or `go run . start` in one terminal
 2. Run `./build/pulse watch` in another terminal to see live metrics
 3. Verify buffering by pointing endpoint to invalid URL and checking buffer directory
 

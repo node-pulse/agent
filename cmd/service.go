@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/node-pulse/agent/internal/pidfile"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%s agent
+ExecStart=%s start
 Restart=always
 RestartSec=10s
 
@@ -35,25 +36,25 @@ var serviceCmd = &cobra.Command{
 	Long:  `Install, start, stop, restart, status, or uninstall the NodePulse systemd service.`,
 }
 
-var installCmd = &cobra.Command{
+var serviceInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install the systemd service",
 	RunE:  installService,
 }
 
-var startCmd = &cobra.Command{
+var serviceStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the service",
 	RunE:  startService,
 }
 
-var stopCmd = &cobra.Command{
+var serviceStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the service",
 	RunE:  stopService,
 }
 
-var restartCmd = &cobra.Command{
+var serviceRestartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the service",
 	RunE:  restartService,
@@ -65,7 +66,7 @@ var serviceStatusCmd = &cobra.Command{
 	RunE:  statusService,
 }
 
-var uninstallCmd = &cobra.Command{
+var serviceUninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Uninstall the systemd service",
 	RunE:  uninstallService,
@@ -73,12 +74,12 @@ var uninstallCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(serviceCmd)
-	serviceCmd.AddCommand(installCmd)
-	serviceCmd.AddCommand(startCmd)
-	serviceCmd.AddCommand(stopCmd)
-	serviceCmd.AddCommand(restartCmd)
+	serviceCmd.AddCommand(serviceInstallCmd)
+	serviceCmd.AddCommand(serviceStartCmd)
+	serviceCmd.AddCommand(serviceStopCmd)
+	serviceCmd.AddCommand(serviceRestartCmd)
 	serviceCmd.AddCommand(serviceStatusCmd)
-	serviceCmd.AddCommand(uninstallCmd)
+	serviceCmd.AddCommand(serviceUninstallCmd)
 }
 
 func installService(cmd *cobra.Command, args []string) error {
@@ -130,6 +131,14 @@ func installService(cmd *cobra.Command, args []string) error {
 func startService(cmd *cobra.Command, args []string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("this command must be run as root (use sudo)")
+	}
+
+	// Check if daemon is already running
+	isRunning, pid, err := pidfile.CheckRunning()
+	if err != nil {
+		fmt.Printf("Warning: failed to check daemon status: %v\n", err)
+	} else if isRunning {
+		return fmt.Errorf("agent is already running as daemon (PID %d)\nUse 'pulse stop' first", pid)
 	}
 
 	if err := runSystemctl("start", serviceName); err != nil {

@@ -154,7 +154,7 @@ buffer:
 
 ```bash
 pulse setup                  # Interactive setup wizard (creates config, generates server ID)
-pulse agent                  # Run agent in foreground (for testing)
+pulse start                  # Run agent in foreground (for testing)
 pulse watch                  # Launch TUI to see live metrics (Bubbletea)
 pulse status                 # Display comprehensive status (server ID, config, service, buffer, logs)
 ```
@@ -181,7 +181,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/pulse agent
+ExecStart=/usr/local/bin/pulse start
 Restart=always
 RestartSec=10s
 
