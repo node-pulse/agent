@@ -70,11 +70,19 @@ buffer:
   retention_hours: 48
 ```
 
-**Server ID Generation**:
+**Server ID Generation & Persistence**:
+
+The server ID uniquely identifies your server in the NodePulse system. The agent handles this automatically:
 
 - If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
-- The generated UUID is saved to `/var/lib/node-pulse/server_id` (or similar location)
-- The same UUID will be reused on subsequent runs
+- The generated UUID is automatically persisted to disk at the first writable location (in order):
+  1. `/var/lib/node-pulse/server_id` (preferred for system-wide installations)
+  2. `/etc/node-pulse/server_id` (alternative system location)
+  3. `~/.node-pulse/server_id` (user home directory)
+  4. `./server_id` (fallback to current directory)
+- The same UUID will be reused on subsequent runs, even if you don't set it in the config
+- The persisted ID takes precedence over the config file to maintain consistency
+- You can check where your server ID is stored with: `pulse current-server`
 - You can also manually set a UUID in the config if you prefer:
   - Linux/Mac: `uuidgen`
   - PowerShell: `New-Guid`
