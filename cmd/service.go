@@ -59,7 +59,7 @@ var restartCmd = &cobra.Command{
 	RunE:  restartService,
 }
 
-var statusCmd = &cobra.Command{
+var serviceStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Check service status",
 	RunE:  statusService,
@@ -77,7 +77,7 @@ func init() {
 	serviceCmd.AddCommand(startCmd)
 	serviceCmd.AddCommand(stopCmd)
 	serviceCmd.AddCommand(restartCmd)
-	serviceCmd.AddCommand(statusCmd)
+	serviceCmd.AddCommand(serviceStatusCmd)
 	serviceCmd.AddCommand(uninstallCmd)
 }
 

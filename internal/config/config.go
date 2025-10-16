@@ -12,10 +12,11 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server  ServerConfig  `mapstructure:"server"`
-	Agent   AgentConfig   `mapstructure:"agent"`
-	Buffer  BufferConfig  `mapstructure:"buffer"`
-	Logging logger.Config `mapstructure:"logging"`
+	Server     ServerConfig  `mapstructure:"server"`
+	Agent      AgentConfig   `mapstructure:"agent"`
+	Buffer     BufferConfig  `mapstructure:"buffer"`
+	Logging    logger.Config `mapstructure:"logging"`
+	ConfigFile string        `mapstructure:"-"` // Path to the config file that was loaded (not from config)
 }
 
 // ServerConfig represents server connection settings
@@ -96,6 +97,9 @@ func Load(configPath string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
+
+	// Store which config file was used
+	cfg.ConfigFile = v.ConfigFileUsed()
 
 	// Ensure server ID exists (auto-generate if needed)
 	if err := EnsureServerID(&cfg); err != nil {
