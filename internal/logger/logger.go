@@ -42,6 +42,11 @@ func init() {
 
 // Initialize sets up the global logger with the provided configuration
 func Initialize(cfg Config) error {
+	// Validate configuration
+	if err := validateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid logger config: %w", err)
+	}
+
 	// Parse log level
 	level, err := parseLevel(cfg.Level)
 	if err != nil {
@@ -68,6 +73,7 @@ func Initialize(cfg Config) error {
 
 	// Create writers based on output configuration
 	var cores []zapcore.Core
+	fileWriterFailed := false
 
 	switch cfg.Output {
 	case "stdout", "console":
@@ -76,20 +82,27 @@ func Initialize(cfg Config) error {
 	case "file":
 		fileWriter, err := createFileWriter(cfg.File)
 		if err != nil {
-			return fmt.Errorf("failed to create file writer: %w", err)
+			// For file-only mode, fall back to stderr with a warning
+			fmt.Fprintf(os.Stderr, "WARNING: Failed to create log file, falling back to stderr: %v\n", err)
+			cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(os.Stderr), level))
+			fileWriterFailed = true
+		} else {
+			cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
 		}
-		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
 
 	case "both":
-		// Console output
+		// Console output (always add this first)
 		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level))
 
-		// File output
+		// File output (attempt, but don't fail if it doesn't work)
 		fileWriter, err := createFileWriter(cfg.File)
 		if err != nil {
-			return fmt.Errorf("failed to create file writer: %w", err)
+			// Log warning but continue with console only
+			fmt.Fprintf(os.Stderr, "WARNING: Failed to create log file, using stdout only: %v\n", err)
+			fileWriterFailed = true
+		} else {
+			cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
 		}
-		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
 
 	default:
 		return fmt.Errorf("invalid output type: %s (must be 'stdout', 'file', or 'both')", cfg.Output)
@@ -102,6 +115,11 @@ func Initialize(cfg Config) error {
 	// Replace global logger
 	logger = newLogger
 	sugar = logger.Sugar()
+
+	// Log warning about file writer failure using the new logger
+	if fileWriterFailed {
+		logger.Warn("Log file creation failed, using fallback output")
+	}
 
 	return nil
 }
@@ -121,6 +139,35 @@ func createFileWriter(cfg FileConfig) (*lumberjack.Logger, error) {
 		MaxAge:     cfg.MaxAgeDays,
 		Compress:   cfg.Compress,
 	}, nil
+}
+
+// validateConfig validates the logger configuration
+func validateConfig(cfg Config) error {
+	// Validate output type
+	switch cfg.Output {
+	case "stdout", "console", "file", "both":
+		// Valid
+	default:
+		return fmt.Errorf("output must be 'stdout', 'file', or 'both', got: %s", cfg.Output)
+	}
+
+	// Validate file config if file output is used
+	if cfg.Output == "file" || cfg.Output == "both" {
+		if cfg.File.Path == "" {
+			return fmt.Errorf("file.path is required when output is 'file' or 'both'")
+		}
+		if cfg.File.MaxSizeMB <= 0 {
+			return fmt.Errorf("file.max_size_mb must be positive, got: %d", cfg.File.MaxSizeMB)
+		}
+		if cfg.File.MaxBackups < 0 {
+			return fmt.Errorf("file.max_backups cannot be negative, got: %d", cfg.File.MaxBackups)
+		}
+		if cfg.File.MaxAgeDays < 0 {
+			return fmt.Errorf("file.max_age_days cannot be negative, got: %d", cfg.File.MaxAgeDays)
+		}
+	}
+
+	return nil
 }
 
 // parseLevel converts string level to zapcore.Level

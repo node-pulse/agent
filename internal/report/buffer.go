@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/node-pulse/agent/internal/config"
+	"github.com/node-pulse/agent/internal/logger"
 	"github.com/node-pulse/agent/internal/metrics"
 )
 
@@ -152,12 +153,17 @@ func (b *Buffer) Cleanup() error {
 		timeStr := filename[:13] // Extract "2006-01-02-15"
 		fileTime, err := time.Parse("2006-01-02-15", timeStr)
 		if err != nil {
+			logger.Debug("Failed to parse buffer file timestamp, skipping", logger.String("file", filename), logger.Err(err))
 			continue
 		}
 
 		// If file is older than cutoff, delete it
 		if fileTime.Before(cutoffTime) {
-			os.Remove(filePath)
+			if err := os.Remove(filePath); err != nil {
+				logger.Warn("Failed to remove old buffer file", logger.String("file", filePath), logger.Err(err))
+			} else {
+				logger.Debug("Removed old buffer file", logger.String("file", filePath))
+			}
 		}
 	}
 

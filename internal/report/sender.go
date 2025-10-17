@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/node-pulse/agent/internal/config"
+	"github.com/node-pulse/agent/internal/logger"
 	"github.com/node-pulse/agent/internal/metrics"
 )
 
@@ -105,6 +106,7 @@ func (s *Sender) FlushBuffer() {
 	// Get all buffer files (oldest first)
 	files, err := s.buffer.GetBufferFiles()
 	if err != nil {
+		logger.Warn("Failed to get buffer files for flushing", logger.Err(err))
 		return
 	}
 
@@ -114,6 +116,7 @@ func (s *Sender) FlushBuffer() {
 		reports, err := s.buffer.LoadFile(filePath)
 		if err != nil {
 			// Skip this file, try next one
+			logger.Warn("Failed to load buffer file, skipping", logger.String("file", filePath), logger.Err(err))
 			continue
 		}
 
@@ -122,6 +125,7 @@ func (s *Sender) FlushBuffer() {
 		for _, report := range reports {
 			data, err := report.ToJSON()
 			if err != nil {
+				logger.Debug("Failed to marshal buffered report, skipping", logger.Err(err))
 				continue
 			}
 
@@ -136,7 +140,11 @@ func (s *Sender) FlushBuffer() {
 
 		// Only delete the file if ALL reports were sent successfully
 		if allSentSuccessfully {
-			s.buffer.DeleteFile(filePath)
+			if err := s.buffer.DeleteFile(filePath); err != nil {
+				logger.Error("Failed to delete buffer file after successful send", logger.String("file", filePath), logger.Err(err))
+			} else {
+				logger.Debug("Successfully flushed and deleted buffer file", logger.String("file", filePath))
+			}
 		} else {
 			// Connection failed - stop trying, we'll retry next time
 			break
@@ -144,7 +152,9 @@ func (s *Sender) FlushBuffer() {
 	}
 
 	// Clean up old buffer files
-	s.buffer.Cleanup()
+	if err := s.buffer.Cleanup(); err != nil {
+		logger.Warn("Failed to cleanup old buffer files", logger.Err(err))
+	}
 }
 
 // Close closes the sender

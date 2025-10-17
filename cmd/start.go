@@ -70,7 +70,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err := logger.Initialize(cfg.Logging); err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to flush logs: %v\n", err)
+		}
+	}()
 
 	// Create report sender
 	sender, err := report.NewSender(cfg)

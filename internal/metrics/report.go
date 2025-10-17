@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"time"
+
+	"github.com/node-pulse/agent/internal/logger"
 )
 
 // Report represents the complete metrics report sent to the server
@@ -35,6 +37,8 @@ func Collect(serverID string) (*Report, error) {
 	// Collect system info (cached after first call)
 	if sysInfo, err := CollectSystemInfo(); err == nil {
 		report.SystemInfo = sysInfo
+	} else {
+		logger.Debug("Failed to collect system info", logger.Err(err))
 	}
 
 	// Collect each metric independently
@@ -44,26 +48,36 @@ func Collect(serverID string) (*Report, error) {
 	if cpu, err := CollectCPU(); err == nil {
 		report.CPU = cpu
 		allFailed = false
+	} else {
+		logger.Debug("Failed to collect CPU metrics", logger.Err(err))
 	}
 
 	if memory, err := CollectMemory(); err == nil {
 		report.Memory = memory
 		allFailed = false
+	} else {
+		logger.Debug("Failed to collect memory metrics", logger.Err(err))
 	}
 
 	if network, err := CollectNetwork(); err == nil {
 		report.Network = network
 		allFailed = false
+	} else {
+		logger.Debug("Failed to collect network metrics", logger.Err(err))
 	}
 
 	if uptime, err := CollectUptime(); err == nil {
 		report.Uptime = uptime
 		allFailed = false
+	} else {
+		logger.Debug("Failed to collect uptime metrics", logger.Err(err))
 	}
 
 	if processes, err := CollectProcesses(); err == nil {
 		report.Processes = processes
 		allFailed = false
+	} else {
+		logger.Debug("Failed to collect process metrics", logger.Err(err))
 	}
 
 	// If all metrics failed, return error
