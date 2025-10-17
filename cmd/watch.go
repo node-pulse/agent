@@ -32,6 +32,11 @@ func init() {
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	// Load configuration
 	cfg, err := config.Load(cfgFile)
 	if err != nil {

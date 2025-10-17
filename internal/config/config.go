@@ -1,11 +1,13 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/node-pulse/agent/internal/logger"
 	"github.com/spf13/viper"
 )
@@ -240,4 +242,49 @@ func (c *Config) EnsureBufferDir() error {
 func (c *Config) GetBufferFilePath(t time.Time) string {
 	filename := fmt.Sprintf("%s.jsonl", t.Format("2006-01-02-15"))
 	return filepath.Join(c.Buffer.Path, filename)
+}
+
+// ConfigExists checks if a configuration file exists in any of the standard locations
+func ConfigExists(configPath string) bool {
+	// If explicit config path provided, check only that
+	if configPath != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			return true
+		}
+		return false
+	}
+
+	// Check standard locations
+	locations := []string{
+		"/etc/node-pulse/nodepulse.yml",
+		filepath.Join(os.Getenv("HOME"), ".node-pulse", "nodepulse.yml"),
+		"nodepulse.yml",
+	}
+
+	for _, loc := range locations {
+		if _, err := os.Stat(loc); err == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// RequireConfig checks if config exists and returns a helpful error if not
+func RequireConfig(configPath string) error {
+	if !ConfigExists(configPath) {
+		// Define color styles
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
+		codeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
+
+		// Build colored error message
+		msg := errorStyle.Render("configuration file not found") + "\n\n" +
+			"Please run setup first:\n" +
+			"  " + codeStyle.Render("pulse setup") + "\n\n" +
+			"Or specify a config file:\n" +
+			"  " + codeStyle.Render("pulse --config /path/to/nodepulse.yml <command>")
+
+		return errors.New(msg)
+	}
+	return nil
 }

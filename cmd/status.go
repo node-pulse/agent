@@ -22,6 +22,11 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	// Load configuration (this will auto-generate UUID if needed)
 	cfg, err := config.Load(cfgFile)
 	if err != nil {

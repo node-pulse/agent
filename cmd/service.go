@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/pidfile"
 	"github.com/spf13/cobra"
 )
@@ -83,6 +84,11 @@ func init() {
 }
 
 func installService(cmd *cobra.Command, args []string) error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	// Check if running as root
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("this command must be run as root (use sudo)")
@@ -129,6 +135,11 @@ func installService(cmd *cobra.Command, args []string) error {
 }
 
 func startService(cmd *cobra.Command, args []string) error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("this command must be run as root (use sudo)")
 	}
@@ -163,6 +174,11 @@ func stopService(cmd *cobra.Command, args []string) error {
 }
 
 func restartService(cmd *cobra.Command, args []string) error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("this command must be run as root (use sudo)")
 	}

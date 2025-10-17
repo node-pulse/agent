@@ -33,6 +33,11 @@ func init() {
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
+	// Check config exists before doing anything
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	// Handle daemon mode
 	if daemonFlag {
 		return runInBackground()
@@ -148,6 +153,11 @@ func collectAndSend(sender *report.Sender, serverID string) error {
 }
 
 func runInBackground() error {
+	// Check config exists
+	if err := config.RequireConfig(cfgFile); err != nil {
+		return err
+	}
+
 	// Check if agent is already running
 	isRunning, existingPid, err := pidfile.CheckRunning()
 	if err != nil {
