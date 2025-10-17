@@ -965,6 +965,17 @@ func (m model) renderServerInfo() string {
 		content.WriteString(renderStatLine("Arch", fmt.Sprintf("%s (%d cores)", sys.Architecture, sys.CPUCores)))
 	}
 
+	// Total RAM
+	if m.report != nil && m.report.Memory != nil {
+		content.WriteString(renderStatLine("Total RAM", formatBytes(m.report.Memory.TotalMB*1024*1024)))
+	}
+
+	// Total Disk
+	if m.report != nil && m.report.Disk != nil {
+		totalDiskBytes := m.report.Disk.TotalGB * 1024 * 1024 * 1024
+		content.WriteString(renderStatLine("Total Disk", formatBytes(totalDiskBytes)))
+	}
+
 	// Current user
 	currentUser := "unknown"
 	if u, err := user.Current(); err == nil {
@@ -973,9 +984,6 @@ func (m model) renderServerInfo() string {
 	content.WriteString(renderStatLine("Current User", currentUser))
 
 	contentStr := strings.TrimRight(content.String(), "\n")
-
-	// Add padding lines to match height with current metrics box
-	contentStr += "\n\n"
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

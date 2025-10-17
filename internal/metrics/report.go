@@ -16,6 +16,7 @@ type Report struct {
 	SystemInfo *SystemInfo      `json:"system_info,omitempty"`
 	CPU        *CPUMetrics      `json:"cpu"`
 	Memory     *MemoryMetrics   `json:"memory"`
+	Disk       *DiskMetrics     `json:"disk"`
 	Network    *NetworkMetrics  `json:"network"`
 	Uptime     *UptimeMetrics   `json:"uptime"`
 	Processes  *ProcessMetrics  `json:"processes"`
@@ -57,6 +58,13 @@ func Collect(serverID string) (*Report, error) {
 		allFailed = false
 	} else {
 		logger.Debug("Failed to collect memory metrics", logger.Err(err))
+	}
+
+	if disk, err := CollectDisk(); err == nil {
+		report.Disk = disk
+		allFailed = false
+	} else {
+		logger.Debug("Failed to collect disk metrics", logger.Err(err))
 	}
 
 	if network, err := CollectNetwork(); err == nil {
