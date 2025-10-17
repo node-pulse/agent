@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -95,8 +96,20 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 		if s == "" && defaultEndpoint == "" {
 			return fmt.Errorf("endpoint is required")
 		}
-		if s != "" && !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
-			return fmt.Errorf("endpoint must start with http:// or https://")
+		if s != "" {
+			// Parse and validate URL
+			parsedURL, err := url.Parse(s)
+			if err != nil {
+				return fmt.Errorf("invalid URL: %v", err)
+			}
+			// Check scheme is http or https
+			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+				return fmt.Errorf("URL must use http:// or https:// scheme")
+			}
+			// Check host is not empty
+			if parsedURL.Host == "" {
+				return fmt.Errorf("URL must include a valid host")
+			}
 		}
 		return nil
 	})

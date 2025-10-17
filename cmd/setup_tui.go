@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -800,8 +801,23 @@ func (m setupTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.err = fmt.Errorf("endpoint is required")
 			return m, nil
 		}
-		if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-			m.err = fmt.Errorf("endpoint must start with http:// or https://")
+
+		// Parse and validate URL
+		parsedURL, err := url.Parse(endpoint)
+		if err != nil {
+			m.err = fmt.Errorf("invalid URL: %v", err)
+			return m, nil
+		}
+
+		// Check scheme is http or https
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			m.err = fmt.Errorf("URL must use http:// or https:// scheme")
+			return m, nil
+		}
+
+		// Check host is not empty
+		if parsedURL.Host == "" {
+			m.err = fmt.Errorf("URL must include a valid host")
 			return m, nil
 		}
 
