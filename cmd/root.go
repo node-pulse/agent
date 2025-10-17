@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -22,7 +21,7 @@ memory, network I/O, and uptime, reporting them to a central server.`,
 // Execute runs the root command
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// Cobra already printed the error and usage, just exit with code 1
 		os.Exit(1)
 	}
 }
