@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -104,6 +105,7 @@ func (s *Sender) StartDraining() {
 }
 
 // drainLoop continuously drains the buffer with random delays
+// Batches up to 5 reports per request for efficiency
 func (s *Sender) drainLoop() {
 	for {
 		// Check if context is cancelled
@@ -128,11 +130,17 @@ func (s *Sender) drainLoop() {
 			continue
 		}
 
-		// Process oldest file
-		filePath := files[0]
-		if err := s.processBufferFile(filePath); err != nil {
-			// Failed to send - keep file and retry after delay
-			logger.Debug("Failed to process buffer file, will retry", logger.String("file", filePath), logger.Err(err))
+		// Determine batch size: up to configured batch_size
+		batchSize := len(files)
+		if batchSize > s.config.Buffer.BatchSize {
+			batchSize = s.config.Buffer.BatchSize
+		}
+
+		// Process batch of files (oldest first)
+		batch := files[:batchSize]
+		if err := s.processBatch(batch); err != nil {
+			// Failed to send - keep files and retry after delay
+			logger.Debug("Failed to process batch, will retry", logger.Int("batch_size", batchSize), logger.Err(err))
 		}
 
 		// Wait random delay before next attempt
@@ -140,7 +148,77 @@ func (s *Sender) drainLoop() {
 	}
 }
 
-// processBufferFile attempts to send all reports from a buffer file
+// processBatch loads and sends a batch of buffer files as a single array request
+// Returns error if send fails (files are kept for retry)
+// Handles corrupted files by sending N/A markers
+func (s *Sender) processBatch(filePaths []string) error {
+	var reports []*metrics.Report
+	var validFiles []string
+
+	// Load all reports from the batch
+	for _, filePath := range filePaths {
+		fileReports, err := s.buffer.LoadFile(filePath)
+		if err != nil {
+			// File is corrupted - send N/A marker and delete
+			logger.Warn("Corrupted buffer file detected in batch, sending N/A metrics",
+				logger.String("file", filePath),
+				logger.Err(err))
+
+			// Create N/A report for this corrupted file
+			naReport := s.createNAReport()
+			reports = append(reports, naReport)
+
+			// Delete corrupted file immediately
+			if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
+				logger.Error("Failed to delete corrupted buffer file",
+					logger.String("file", filePath),
+					logger.Err(delErr))
+			} else {
+				logger.Info("Deleted corrupted buffer file", logger.String("file", filePath))
+			}
+			continue
+		}
+
+		// File loaded successfully - add to batch
+		if len(fileReports) > 0 {
+			reports = append(reports, fileReports...)
+			validFiles = append(validFiles, filePath)
+		}
+	}
+
+	// If no reports to send, we're done
+	if len(reports) == 0 {
+		return nil
+	}
+
+	// Send batch as array
+	if err := s.sendBatch(reports); err != nil {
+		// Send failed - keep valid files for retry
+		return fmt.Errorf("failed to send batch of %d reports: %w", len(reports), err)
+	}
+
+	// Send succeeded - delete all valid files
+	for _, filePath := range validFiles {
+		if err := s.buffer.DeleteFile(filePath); err != nil {
+			logger.Error("Failed to delete buffer file after successful send",
+				logger.String("file", filePath),
+				logger.Err(err))
+		}
+	}
+
+	logger.Info("Successfully sent batch",
+		logger.Int("reports", len(reports)),
+		logger.Int("files", len(validFiles)))
+
+	// Periodically clean up old buffer files
+	if err := s.buffer.Cleanup(); err != nil {
+		logger.Warn("Failed to cleanup old buffer files", logger.Err(err))
+	}
+
+	return nil
+}
+
+// processBufferFile attempts to send all reports from a buffer file (DEPRECATED - kept for compatibility)
 // Returns error if any report fails to send (file is kept for retry)
 // If file is corrupted, sends N/A metrics and deletes the corrupted file
 func (s *Sender) processBufferFile(filePath string) error {
@@ -210,6 +288,43 @@ func (s *Sender) processBufferFile(filePath string) error {
 	}
 
 	return nil
+}
+
+// sendBatch sends an array of reports to the server
+func (s *Sender) sendBatch(reports []*metrics.Report) error {
+	// Marshal array of reports to JSON
+	data, err := json.Marshal(reports)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch: %w", err)
+	}
+
+	// Send via HTTP
+	if err := s.sendHTTP(data); err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+
+	return nil
+}
+
+// createNAReport creates a report with all metrics set to null (N/A)
+func (s *Sender) createNAReport() *metrics.Report {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+
+	return &metrics.Report{
+		ServerID:   s.config.Agent.ServerID,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Hostname:   hostname,
+		SystemInfo: nil,
+		CPU:        nil,
+		Memory:     nil,
+		Disk:       nil,
+		Network:    nil,
+		Uptime:     nil,
+		Processes:  nil,
+	}
 }
 
 // sendCorruptedFileMarker sends a report with all metrics set to null (N/A)

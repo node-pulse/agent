@@ -31,6 +31,11 @@ buffer:
   # Files older than this are automatically deleted
   retention_hours: 48
 
+  # Number of reports to send per batch request
+  # Higher values = fewer HTTP requests, larger payloads
+  # Default: 5
+  batch_size: 5
+
 logging:
   # Log level: debug, info, warn, error
   # debug: Verbose diagnostic information for troubleshooting

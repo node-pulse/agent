@@ -34,8 +34,9 @@ type ConfigOptions struct {
 	Interval string
 
 	// Buffer options (buffer is always enabled in new architecture)
-	BufferPath          string
+	BufferPath           string
 	BufferRetentionHours int
+	BufferBatchSize      int
 
 	// Logging options
 	LogLevel      string
@@ -207,8 +208,9 @@ func DefaultConfigOptions() ConfigOptions {
 		Interval: "5s",
 
 		// Buffer defaults (always enabled)
-		BufferPath:          DefaultBufferPath,
+		BufferPath:           DefaultBufferPath,
 		BufferRetentionHours: 48,
+		BufferBatchSize:      5,
 
 		// Logging defaults
 		LogLevel:      "info",
@@ -236,6 +238,7 @@ func WriteConfigFile(opts ConfigOptions) error {
 		"buffer": map[string]interface{}{
 			"path":            opts.BufferPath,
 			"retention_hours": opts.BufferRetentionHours,
+			"batch_size":      opts.BufferBatchSize,
 		},
 		"logging": map[string]interface{}{
 			"level":  opts.LogLevel,

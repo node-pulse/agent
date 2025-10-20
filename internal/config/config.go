@@ -38,6 +38,7 @@ type AgentConfig struct {
 type BufferConfig struct {
 	Path           string `mapstructure:"path"`
 	RetentionHours int    `mapstructure:"retention_hours"`
+	BatchSize      int    `mapstructure:"batch_size"` // Number of reports to send per batch (default: 5)
 }
 
 var (
@@ -52,6 +53,7 @@ var (
 		Buffer: BufferConfig{
 			Path:           "/var/lib/node-pulse/buffer",
 			RetentionHours: 48,
+			BatchSize:      5,
 		},
 		Logging: logger.Config{
 			Level:  "info",
@@ -122,6 +124,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("agent.interval", defaultConfig.Agent.Interval)
 	v.SetDefault("buffer.path", defaultConfig.Buffer.Path)
 	v.SetDefault("buffer.retention_hours", defaultConfig.Buffer.RetentionHours)
+	v.SetDefault("buffer.batch_size", defaultConfig.Buffer.BatchSize)
 	v.SetDefault("logging.level", defaultConfig.Logging.Level)
 	v.SetDefault("logging.output", defaultConfig.Logging.Output)
 	v.SetDefault("logging.file.path", defaultConfig.Logging.File.Path)
@@ -179,6 +182,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Buffer.RetentionHours <= 0 {
 		return fmt.Errorf("buffer.retention_hours must be positive")
+	}
+	if cfg.Buffer.BatchSize <= 0 {
+		return fmt.Errorf("buffer.batch_size must be positive")
 	}
 
 	return nil
