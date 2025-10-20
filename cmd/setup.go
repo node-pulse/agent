@@ -14,6 +14,22 @@ import (
 
 var (
 	quickMode bool
+
+	// Config flags for quick mode
+	flagEndpointURL      string
+	flagServerID         string
+	flagInterval         string
+	flagTimeout          string
+	flagBufferEnabled    bool
+	flagBufferDir        string
+	flagBufferRetention  int
+	flagLogLevel         string
+	flagLogOutput        string
+	flagLogFile          string
+	flagLogMaxSize       int
+	flagLogMaxBackups    int
+	flagLogMaxAge        int
+	flagLogCompress      bool
 )
 
 // setupCmd represents the setup command
@@ -30,14 +46,46 @@ with minimal prompts.`,
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
-	setupCmd.Flags().BoolVarP(&quickMode, "yes", "y", false, "Quick mode - minimal prompts, use defaults")
+	setupCmd.Flags().BoolVarP(&quickMode, "yes", "y", false, "Quick mode - non-interactive setup with flags")
+
+	// Server configuration flags
+	setupCmd.Flags().StringVar(&flagEndpointURL, "endpoint-url", "", "Metrics endpoint URL (required with --yes)")
+	setupCmd.Flags().StringVar(&flagTimeout, "timeout", "3s", "HTTP request timeout")
+
+	// Agent configuration flags
+	setupCmd.Flags().StringVar(&flagServerID, "server-id", "", "Server ID (auto-generated UUID if not provided)")
+	setupCmd.Flags().StringVar(&flagInterval, "interval", "5s", "Metric collection interval (5s, 10s, 30s, or 1m)")
+
+	// Buffer configuration flags
+	setupCmd.Flags().BoolVar(&flagBufferEnabled, "buffer-enabled", true, "Enable offline buffering")
+	setupCmd.Flags().StringVar(&flagBufferDir, "buffer-dir", "/var/lib/node-pulse/buffer", "Buffer directory path")
+	setupCmd.Flags().IntVar(&flagBufferRetention, "buffer-retention", 48, "Buffer retention in hours")
+
+	// Logging configuration flags
+	setupCmd.Flags().StringVar(&flagLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	setupCmd.Flags().StringVar(&flagLogOutput, "log-output", "stdout", "Log output destination (stdout, file, both)")
+	setupCmd.Flags().StringVar(&flagLogFile, "log-file", "/var/log/node-pulse/agent.log", "Log file path")
+	setupCmd.Flags().IntVar(&flagLogMaxSize, "log-max-size", 10, "Max log file size in MB")
+	setupCmd.Flags().IntVar(&flagLogMaxBackups, "log-max-backups", 3, "Max number of old log files to keep")
+	setupCmd.Flags().IntVar(&flagLogMaxAge, "log-max-age", 7, "Max age in days to keep old log files")
+	setupCmd.Flags().BoolVar(&flagLogCompress, "log-compress", true, "Compress old log files")
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {
 	// Run appropriate mode
 	if quickMode {
-		// Quick mode: run checks before prompts
-		fmt.Println("⚡ Node Pulse Agent Setup")
+		// Validate that endpoint URL is provided in quick mode
+		if flagEndpointURL == "" {
+			return fmt.Errorf("--endpoint-url is required when using --yes flag")
+		}
+
+		// Validate endpoint URL format
+		if err := validateEndpointURL(flagEndpointURL); err != nil {
+			return fmt.Errorf("invalid endpoint URL: %w", err)
+		}
+
+		// Quick mode: run checks before installation
+		fmt.Println("⚡ Node Pulse Agent Setup (Quick Mode)")
 		fmt.Println()
 
 		// Check permissions
@@ -63,12 +111,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 			if existing.HasServerID {
 				fmt.Printf("  Server ID: %s\n", strings.TrimSpace(existing.ServerID))
 			}
-			fmt.Println()
-
-			if !promptYesNo("Continue and update configuration?", true) {
-				fmt.Println("\nInstallation cancelled")
-				return nil
-			}
+			fmt.Println("  Configuration will be overwritten with provided flags")
 			fmt.Println()
 		}
 
@@ -80,92 +123,68 @@ func runSetup(cmd *cobra.Command, args []string) error {
 }
 
 func runQuickMode(existing *installer.ExistingInstall) error {
-	fmt.Println("🚀 Quick Mode Setup")
+	fmt.Println("🚀 Building Configuration from Flags")
 	fmt.Println()
-
-	// Prompt for endpoint
-	defaultEndpoint := ""
-	endpointPrompt := "Enter endpoint URL"
-	if existing.Endpoint != "" {
-		defaultEndpoint = strings.TrimSpace(existing.Endpoint)
-		fmt.Printf("Existing endpoint: %s\n", defaultEndpoint)
-		endpointPrompt = "Enter endpoint URL (leave empty to keep existing)"
-	}
-
-	endpoint, err := promptString(endpointPrompt, "", func(s string) error {
-		if s == "" && defaultEndpoint == "" {
-			return fmt.Errorf("endpoint is required")
-		}
-		if s != "" {
-			// Parse and validate URL
-			parsedURL, err := url.Parse(s)
-			if err != nil {
-				return fmt.Errorf("invalid URL: %v", err)
-			}
-			// Check scheme is http or https
-			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-				return fmt.Errorf("URL must use http:// or https:// scheme")
-			}
-			// Check host is not empty
-			if parsedURL.Host == "" {
-				return fmt.Errorf("URL must include a valid host")
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	// Use existing endpoint if user pressed Enter
-	if endpoint == "" && defaultEndpoint != "" {
-		endpoint = defaultEndpoint
-		fmt.Println("Keeping existing endpoint")
-	}
-
-	// Prompt for server ID
-	defaultServerID := ""
-	serverIDPrompt := "Enter server ID (leave empty to auto-generate UUID)"
-	if existing.HasServerID {
-		defaultServerID = strings.TrimSpace(existing.ServerID)
-		fmt.Printf("Existing server ID: %s\n", defaultServerID)
-		serverIDPrompt = "Enter server ID (leave empty to keep existing)"
-	}
-
-	serverID, err := promptString(serverIDPrompt, "", func(s string) error {
-		if s == "" {
-			return nil // Empty is OK, will auto-generate or use existing
-		}
-		return installer.ValidateServerID(s)
-	})
-	if err != nil {
-		return err
-	}
 
 	// Handle server ID
 	var finalServerID string
-	if serverID == "" {
-		if existing.HasServerID {
-			finalServerID = defaultServerID
-			fmt.Println("Keeping existing server ID")
-		} else {
-			fmt.Print("Generating server ID... ")
-			finalServerID, err = installer.HandleServerID("")
-			if err != nil {
-				fmt.Println("✗")
-				return err
-			}
-			fmt.Printf("✓\n  %s\n", finalServerID)
+	if flagServerID != "" {
+		// Use provided server ID
+		if err := installer.ValidateServerID(flagServerID); err != nil {
+			return fmt.Errorf("invalid server ID: %w", err)
 		}
+		finalServerID = flagServerID
+		fmt.Printf("Using provided server ID: %s\n", finalServerID)
+	} else if existing.HasServerID {
+		// Keep existing server ID
+		finalServerID = strings.TrimSpace(existing.ServerID)
+		fmt.Printf("Keeping existing server ID: %s\n", finalServerID)
 	} else {
-		finalServerID = serverID
-		fmt.Println("Server ID set")
+		// Auto-generate UUID
+		fmt.Print("Generating server ID... ")
+		var err error
+		finalServerID, err = installer.HandleServerID("")
+		if err != nil {
+			fmt.Println("✗")
+			return err
+		}
+		fmt.Printf("✓\n  %s\n", finalServerID)
 	}
 
-	// Create config options with defaults
-	opts := installer.DefaultConfigOptions()
-	opts.Endpoint = endpoint
-	opts.ServerID = finalServerID
+	// Build config options from flags
+	opts := installer.ConfigOptions{
+		// Server options
+		Endpoint: flagEndpointURL,
+		Timeout:  flagTimeout,
+
+		// Agent options
+		ServerID: finalServerID,
+		Interval: flagInterval,
+
+		// Buffer options
+		BufferEnabled:        flagBufferEnabled,
+		BufferPath:           flagBufferDir,
+		BufferRetentionHours: flagBufferRetention,
+
+		// Logging options
+		LogLevel:      flagLogLevel,
+		LogOutput:     flagLogOutput,
+		LogFilePath:   flagLogFile,
+		LogMaxSizeMB:  flagLogMaxSize,
+		LogMaxBackups: flagLogMaxBackups,
+		LogMaxAgeDays: flagLogMaxAge,
+		LogCompress:   flagLogCompress,
+	}
+
+	fmt.Println()
+	fmt.Printf("Configuration summary:\n")
+	fmt.Printf("  Endpoint:       %s\n", opts.Endpoint)
+	fmt.Printf("  Server ID:      %s\n", opts.ServerID)
+	fmt.Printf("  Interval:       %s\n", opts.Interval)
+	fmt.Printf("  Timeout:        %s\n", opts.Timeout)
+	fmt.Printf("  Buffer enabled: %v\n", opts.BufferEnabled)
+	fmt.Printf("  Log level:      %s\n", opts.LogLevel)
+	fmt.Println()
 
 	// Perform installation
 	return performInstallation(opts)
@@ -275,40 +294,22 @@ func performInstallation(opts installer.ConfigOptions) error {
 	return nil
 }
 
-// promptString prompts for a string input with validation
-func promptString(prompt, defaultVal string, validate func(string) error) (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-
-	for {
-		if defaultVal != "" {
-			fmt.Printf("%s [%s]: ", prompt, defaultVal)
-		} else {
-			fmt.Printf("%s: ", prompt)
-		}
-
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Failed to read input:")
-			return "", err
-		}
-
-		input = strings.TrimSpace(input)
-
-		// Use default if empty and default exists
-		if input == "" && defaultVal != "" {
-			input = defaultVal
-		}
-
-		// Validate
-		if validate != nil {
-			if err := validate(input); err != nil {
-				fmt.Printf("❌ %v\n", err)
-				continue
-			}
-		}
-
-		return input, nil
+// validateEndpointURL validates endpoint URL format
+func validateEndpointURL(endpointURL string) error {
+	// Parse and validate URL
+	parsedURL, err := url.Parse(endpointURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %v", err)
 	}
+	// Check scheme is http or https
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("URL must use http:// or https:// scheme")
+	}
+	// Check host is not empty
+	if parsedURL.Host == "" {
+		return fmt.Errorf("URL must include a valid host")
+	}
+	return nil
 }
 
 // promptYesNo prompts for a yes/no answer
