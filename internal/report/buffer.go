@@ -1,12 +1,12 @@
 package report
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,31 +33,26 @@ func NewBuffer(cfg *config.Config) (*Buffer, error) {
 	}, nil
 }
 
-// Save saves a report to the buffer
+// Save saves a report to the buffer as an individual JSON file
+// Filename format: YYYYMMDD-HHMMSS.json (sortable by timestamp)
 func (b *Buffer) Save(report *metrics.Report) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Get buffer file path for current hour
+	// Generate unique filename with timestamp (sortable, compact)
 	now := time.Now()
-	filePath := b.config.GetBufferFilePath(now)
+	filename := fmt.Sprintf("%s.json", now.Format("20060102-150405"))
+	filePath := filepath.Join(b.config.Buffer.Path, filename)
 
-	// Open file in append mode
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open buffer file: %w", err)
-	}
-	defer file.Close()
-
-	// Convert to JSONL
-	data, err := report.ToJSONL()
+	// Convert to JSON
+	data, err := report.ToJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal report: %w", err)
 	}
 
-	// Write to file
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("failed to write to buffer: %w", err)
+	// Write to individual file
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write buffer file: %w", err)
 	}
 
 	return nil
@@ -71,7 +66,8 @@ func (b *Buffer) GetBufferFiles() ([]string, error) {
 	return b.getBufferFiles()
 }
 
-// LoadFile loads all reports from a specific buffer file without deleting it
+// LoadFile loads a single report from a buffer file
+// Returns a slice with one report for consistency with the API
 func (b *Buffer) LoadFile(filePath string) ([]*metrics.Report, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -87,44 +83,33 @@ func (b *Buffer) DeleteFile(filePath string) error {
 	return os.Remove(filePath)
 }
 
-// readBufferFile reads all reports from a buffer file
+// readBufferFile reads a single report from a JSON buffer file
 func (b *Buffer) readBufferFile(filePath string) ([]*metrics.Report, error) {
-	file, err := os.Open(filePath)
+	// Read entire file
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var reports []*metrics.Report
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		var report metrics.Report
-		if err := json.Unmarshal(line, &report); err != nil {
-			// Skip invalid lines
-			continue
-		}
-
-		reports = append(reports, &report)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	return reports, scanner.Err()
+	// Parse JSON
+	var report metrics.Report
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Return as slice for consistency with API
+	return []*metrics.Report{&report}, nil
 }
 
 // getBufferFiles returns all buffer files sorted by name (chronological order)
 func (b *Buffer) getBufferFiles() ([]string, error) {
-	pattern := filepath.Join(b.config.Buffer.Path, "*.jsonl")
+	pattern := filepath.Join(b.config.Buffer.Path, "*.json")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, err
 	}
 
-	// Sort files by name (which is chronological due to format YYYY-MM-DD-HH)
+	// Sort files by name (chronological due to format YYYY-MM-DD-HH-MM-SS-nanos)
 	sort.Strings(files)
 
 	return files, nil
@@ -144,14 +129,17 @@ func (b *Buffer) Cleanup() error {
 
 	for _, filePath := range files {
 		// Extract timestamp from filename
+		// Format: YYYYMMDD-HHMMSS.json (e.g., 20251020-143045.json)
 		filename := filepath.Base(filePath)
-		// Format: 2006-01-02-15.jsonl
-		if len(filename) < 13 {
+
+		// Remove .json extension
+		if !strings.HasSuffix(filename, ".json") {
 			continue
 		}
+		timeStr := strings.TrimSuffix(filename, ".json")
 
-		timeStr := filename[:13] // Extract "2006-01-02-15"
-		fileTime, err := time.Parse("2006-01-02-15", timeStr)
+		// Parse timestamp from filename
+		fileTime, err := time.Parse("20060102-150405", timeStr)
 		if err != nil {
 			logger.Debug("Failed to parse buffer file timestamp, skipping", logger.String("file", filename), logger.Err(err))
 			continue

@@ -34,8 +34,8 @@ type AgentConfig struct {
 }
 
 // BufferConfig represents buffer settings
+// Note: Buffer is always enabled in the new architecture (write-ahead log pattern)
 type BufferConfig struct {
-	Enabled        bool   `mapstructure:"enabled"`
 	Path           string `mapstructure:"path"`
 	RetentionHours int    `mapstructure:"retention_hours"`
 }
@@ -50,7 +50,6 @@ var (
 			Interval: 5 * time.Second,
 		},
 		Buffer: BufferConfig{
-			Enabled:        true,
 			Path:           "/var/lib/node-pulse/buffer",
 			RetentionHours: 48,
 		},
@@ -121,7 +120,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.endpoint", defaultConfig.Server.Endpoint)
 	v.SetDefault("server.timeout", defaultConfig.Server.Timeout)
 	v.SetDefault("agent.interval", defaultConfig.Agent.Interval)
-	v.SetDefault("buffer.enabled", defaultConfig.Buffer.Enabled)
 	v.SetDefault("buffer.path", defaultConfig.Buffer.Path)
 	v.SetDefault("buffer.retention_hours", defaultConfig.Buffer.RetentionHours)
 	v.SetDefault("logging.level", defaultConfig.Logging.Level)
@@ -175,13 +173,12 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("agent.interval must be one of: 5s, 10s, 30s, 1m")
 	}
 
-	if cfg.Buffer.Enabled {
-		if cfg.Buffer.Path == "" {
-			return fmt.Errorf("buffer.path is required when buffer is enabled")
-		}
-		if cfg.Buffer.RetentionHours <= 0 {
-			return fmt.Errorf("buffer.retention_hours must be positive")
-		}
+	// Buffer is always enabled now
+	if cfg.Buffer.Path == "" {
+		return fmt.Errorf("buffer.path is required")
+	}
+	if cfg.Buffer.RetentionHours <= 0 {
+		return fmt.Errorf("buffer.retention_hours must be positive")
 	}
 
 	return nil
@@ -227,21 +224,11 @@ func isAlphanumeric(c rune) bool {
 
 // EnsureBufferDir creates the buffer directory if it doesn't exist
 func (c *Config) EnsureBufferDir() error {
-	if !c.Buffer.Enabled {
-		return nil
-	}
-
 	if err := os.MkdirAll(c.Buffer.Path, 0755); err != nil {
 		return fmt.Errorf("failed to create buffer directory: %w", err)
 	}
 
 	return nil
-}
-
-// GetBufferFilePath returns the path for the current hour's buffer file
-func (c *Config) GetBufferFilePath(t time.Time) string {
-	filename := fmt.Sprintf("%s.jsonl", t.Format("2006-01-02-15"))
-	return filepath.Join(c.Buffer.Path, filename)
 }
 
 // ConfigExists checks if a configuration file exists in any of the standard locations

@@ -88,6 +88,10 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer sender.Close()
 
+	// Start background draining goroutine (WAL pattern)
+	// This continuously sends buffered reports with random jitter
+	sender.StartDraining()
+
 	// Setup signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -110,19 +114,20 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		logger.Duration("interval", cfg.Agent.Interval),
 		logger.String("endpoint", cfg.Server.Endpoint))
 
-	// Collect and send immediately on start
+	// Collect and save to buffer immediately on start
 	if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-		logger.Error("Collection and send failed", logger.Err(err))
+		logger.Error("Collection failed", logger.Err(err))
 	}
 
-	// Then continue with ticker
+	// Then continue with ticker (collect and save to buffer at interval)
+	// Background goroutine will drain buffer with random jitter
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 			if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-				logger.Error("Collection and send failed", logger.Err(err))
+				logger.Error("Collection failed", logger.Err(err))
 			}
 		}
 	}
@@ -139,16 +144,16 @@ func collectAndSend(sender *report.Sender, serverID string) error {
 	stats := metrics.GetGlobalStats()
 	stats.RecordCollection(metricsReport)
 
-	// Send report
+	// Save to buffer (WAL pattern - actual sending happens in background with jitter)
 	if err := sender.Send(metricsReport); err != nil {
-		// Record failure
+		// Record failure (failed to save to buffer)
 		stats.RecordFailure()
-		return fmt.Errorf("failed to send report: %w", err)
+		return fmt.Errorf("failed to save to buffer: %w", err)
 	}
 
-	// Record success
+	// Record success (successfully buffered)
 	stats.RecordSuccess()
-	logger.Info("Report sent successfully")
+	logger.Info("Report collected and buffered")
 	return nil
 }
 

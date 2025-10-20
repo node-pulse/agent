@@ -16,20 +16,19 @@ var (
 	quickMode bool
 
 	// Config flags for quick mode
-	flagEndpointURL      string
-	flagServerID         string
-	flagInterval         string
-	flagTimeout          string
-	flagBufferEnabled    bool
-	flagBufferDir        string
-	flagBufferRetention  int
-	flagLogLevel         string
-	flagLogOutput        string
-	flagLogFile          string
-	flagLogMaxSize       int
-	flagLogMaxBackups    int
-	flagLogMaxAge        int
-	flagLogCompress      bool
+	flagEndpointURL     string
+	flagServerID        string
+	flagInterval        string
+	flagTimeout         string
+	flagBufferDir       string
+	flagBufferRetention int
+	flagLogLevel        string
+	flagLogOutput       string
+	flagLogFile         string
+	flagLogMaxSize      int
+	flagLogMaxBackups   int
+	flagLogMaxAge       int
+	flagLogCompress     bool
 )
 
 // setupCmd represents the setup command
@@ -56,8 +55,7 @@ func init() {
 	setupCmd.Flags().StringVar(&flagServerID, "server-id", "", "Server ID (auto-generated UUID if not provided)")
 	setupCmd.Flags().StringVar(&flagInterval, "interval", "5s", "Metric collection interval (5s, 10s, 30s, or 1m)")
 
-	// Buffer configuration flags
-	setupCmd.Flags().BoolVar(&flagBufferEnabled, "buffer-enabled", true, "Enable offline buffering")
+	// Buffer configuration flags (buffer is always enabled)
 	setupCmd.Flags().StringVar(&flagBufferDir, "buffer-dir", "/var/lib/node-pulse/buffer", "Buffer directory path")
 	setupCmd.Flags().IntVar(&flagBufferRetention, "buffer-retention", 48, "Buffer retention in hours")
 
@@ -161,8 +159,7 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 		ServerID: finalServerID,
 		Interval: flagInterval,
 
-		// Buffer options
-		BufferEnabled:        flagBufferEnabled,
+		// Buffer options (always enabled)
 		BufferPath:           flagBufferDir,
 		BufferRetentionHours: flagBufferRetention,
 
@@ -178,12 +175,12 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 
 	fmt.Println()
 	fmt.Printf("Configuration summary:\n")
-	fmt.Printf("  Endpoint:       %s\n", opts.Endpoint)
-	fmt.Printf("  Server ID:      %s\n", opts.ServerID)
-	fmt.Printf("  Interval:       %s\n", opts.Interval)
-	fmt.Printf("  Timeout:        %s\n", opts.Timeout)
-	fmt.Printf("  Buffer enabled: %v\n", opts.BufferEnabled)
-	fmt.Printf("  Log level:      %s\n", opts.LogLevel)
+	fmt.Printf("  Endpoint:     %s\n", opts.Endpoint)
+	fmt.Printf("  Server ID:    %s\n", opts.ServerID)
+	fmt.Printf("  Interval:     %s\n", opts.Interval)
+	fmt.Printf("  Timeout:      %s\n", opts.Timeout)
+	fmt.Printf("  Buffer path:  %s\n", opts.BufferPath)
+	fmt.Printf("  Log level:    %s\n", opts.LogLevel)
 	fmt.Println()
 
 	// Perform installation

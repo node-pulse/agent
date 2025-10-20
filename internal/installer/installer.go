@@ -33,8 +33,7 @@ type ConfigOptions struct {
 	ServerID string
 	Interval string
 
-	// Buffer options
-	BufferEnabled       bool
+	// Buffer options (buffer is always enabled in new architecture)
 	BufferPath          string
 	BufferRetentionHours int
 
@@ -207,8 +206,7 @@ func DefaultConfigOptions() ConfigOptions {
 		// Agent defaults
 		Interval: "5s",
 
-		// Buffer defaults
-		BufferEnabled:       true,
+		// Buffer defaults (always enabled)
 		BufferPath:          DefaultBufferPath,
 		BufferRetentionHours: 48,
 
@@ -236,7 +234,6 @@ func WriteConfigFile(opts ConfigOptions) error {
 			"interval":  opts.Interval,
 		},
 		"buffer": map[string]interface{}{
-			"enabled":         opts.BufferEnabled,
 			"path":            opts.BufferPath,
 			"retention_hours": opts.BufferRetentionHours,
 		},

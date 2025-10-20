@@ -59,18 +59,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Agent:         %s\n", serviceStatus)
 	fmt.Println()
 
-	// Buffer Status
-	if cfg.Buffer.Enabled {
-		bufferCount, err := countBufferFiles(cfg.Buffer.Path)
-		if err != nil {
-			fmt.Printf("Buffer:        enabled (error checking: %v)\n", err)
-		} else if bufferCount > 0 {
-			fmt.Printf("Buffer:        %d report(s) pending in %s\n", bufferCount, cfg.Buffer.Path)
-		} else {
-			fmt.Printf("Buffer:        enabled, no pending reports\n")
-		}
+	// Buffer Status (always enabled in new architecture)
+	bufferCount, err := countBufferFiles(cfg.Buffer.Path)
+	if err != nil {
+		fmt.Printf("Buffer:        error checking: %v\n", err)
+	} else if bufferCount > 0 {
+		fmt.Printf("Buffer:        %d report(s) pending in %s\n", bufferCount, cfg.Buffer.Path)
 	} else {
-		fmt.Printf("Buffer:        disabled\n")
+		fmt.Printf("Buffer:        no pending reports\n")
 	}
 	fmt.Println()
 

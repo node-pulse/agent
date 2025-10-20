@@ -6,7 +6,7 @@ server:
 
   # HTTP request timeout
   # If the server doesn't respond within this time, the request fails
-  # and the metrics are saved to the local buffer
+  # and the buffered report will be retried later
   timeout: 3s
 
 agent:
@@ -21,11 +21,10 @@ agent:
   interval: 5s
 
 buffer:
-  # Enable local buffering of failed reports
-  enabled: true
-
   # Directory to store buffered reports
-  # Each hour gets its own JSONL file (e.g., 2025-10-13-14.jsonl)
+  # All metrics are buffered first (Write-Ahead Log pattern)
+  # Each collection creates one JSON file (e.g., 20251020-143045.json)
+  # Background process sends buffered data with random jitter to distribute load
   path: "/var/lib/node-pulse/buffer"
 
   # How long to keep buffered reports (in hours)

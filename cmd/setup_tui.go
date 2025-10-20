@@ -666,10 +666,7 @@ func (m setupTUIModel) viewReview() string {
 	summary.WriteString(labelStyle.Render("Server ID:") + " " + valueStyle.Render(m.config.ServerID) + "\n")
 	summary.WriteString(labelStyle.Render("Interval:") + " " + valueStyle.Render(m.config.Interval) + "\n")
 	summary.WriteString(labelStyle.Render("Timeout:") + " " + valueStyle.Render(m.config.Timeout) + "\n")
-	bufferStatus := "Disabled"
-	if m.config.BufferEnabled {
-		bufferStatus = fmt.Sprintf("Enabled (%dh retention)", m.config.BufferRetentionHours)
-	}
+	bufferStatus := fmt.Sprintf("%s (%dh retention)", m.config.BufferPath, m.config.BufferRetentionHours)
 	summary.WriteString(labelStyle.Render("Buffer:") + " " + valueStyle.Render(bufferStatus) + "\n")
 	summary.WriteString(labelStyle.Render("Logging:") + " " + valueStyle.Render(fmt.Sprintf("%s → %s", m.config.LogLevel, m.config.LogOutput)) + "\n")
 	summary.WriteString(labelStyle.Render("Config Path:") + " " + valueStyle.Render("/etc/node-pulse/nodepulse.yml"))
@@ -902,29 +899,16 @@ func (m setupTUIModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.Timeout = timeout
 		m.err = nil
 
-		// Move to buffer screen
-		m.screen = ScreenBuffer
-		if m.config.BufferEnabled {
-			m.textInput.SetValue("yes")
-		} else {
-			m.textInput.SetValue("no")
-		}
-		m.textInput.Placeholder = "yes/no"
+		// Skip buffer screen (buffer is always enabled now) and go to logging
+		m.screen = ScreenLogging
+		m.textInput.SetValue(m.config.LogLevel)
+		m.textInput.Placeholder = "debug, info, warn, error"
 		m.textInput.Focus()
 		return m, textinput.Blink
 
 	case ScreenBuffer:
-		// Parse buffer settings
-		input := strings.ToLower(strings.TrimSpace(m.textInput.Value()))
-		if input != "yes" && input != "no" {
-			m.err = fmt.Errorf("enter 'yes' or 'no'")
-			return m, nil
-		}
-
-		m.config.BufferEnabled = (input == "yes")
-		m.err = nil
-
-		// Move to logging screen
+		// Buffer screen is deprecated (buffer is always enabled)
+		// Skip to logging screen
 		m.screen = ScreenLogging
 		m.textInput.SetValue(m.config.LogLevel)
 		m.textInput.Placeholder = "debug, info, warn, error"
@@ -1005,14 +989,10 @@ func (m setupTUIModel) handleBack() (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 
 	case ScreenLogging:
-		// Go back to buffer
-		m.screen = ScreenBuffer
-		m.textInput.Placeholder = "yes/no"
-		if m.config.BufferEnabled {
-			m.textInput.SetValue("yes")
-		} else {
-			m.textInput.SetValue("no")
-		}
+		// Go back to timeout (buffer screen is skipped)
+		m.screen = ScreenTimeout
+		m.textInput.Placeholder = "3s"
+		m.textInput.SetValue(m.config.Timeout)
 		m.textInput.Focus()
 		return m, textinput.Blink
 

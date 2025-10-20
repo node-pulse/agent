@@ -2,9 +2,13 @@ package report
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/logger"
@@ -12,10 +16,16 @@ import (
 )
 
 // Sender handles sending metrics reports to the server
+// New architecture: Write-Ahead Log (WAL) pattern
+// - All metrics are written to buffer first
+// - Separate goroutine drains buffer continuously with random jitter
 type Sender struct {
-	config *config.Config
-	client *http.Client
-	buffer *Buffer
+	config     *config.Config
+	client     *http.Client
+	buffer     *Buffer
+	drainCtx   context.Context
+	drainStop  context.CancelFunc
+	rng        *rand.Rand
 }
 
 // NewSender creates a new report sender
@@ -25,47 +35,37 @@ func NewSender(cfg *config.Config) (*Sender, error) {
 		Timeout: cfg.Server.Timeout,
 	}
 
-	// Create buffer if enabled
-	var buffer *Buffer
-	if cfg.Buffer.Enabled {
-		var err error
-		buffer, err = NewBuffer(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create buffer: %w", err)
-		}
+	// Create buffer (always enabled in new architecture)
+	buffer, err := NewBuffer(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create buffer: %w", err)
 	}
 
+	// Create context for drain goroutine
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create random number generator with time-based seed for jitter
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	return &Sender{
-		config: cfg,
-		client: client,
-		buffer: buffer,
+		config:    cfg,
+		client:    client,
+		buffer:    buffer,
+		drainCtx:  ctx,
+		drainStop: cancel,
+		rng:       rng,
 	}, nil
 }
 
-// Send sends a metrics report to the server
-// If sending fails, the report is buffered (if enabled)
+// Send saves a metrics report to the buffer
+// The report will be sent asynchronously by the drain goroutine
 func (s *Sender) Send(report *metrics.Report) error {
-	data, err := report.ToJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal report: %w", err)
+	// Always save to buffer first (WAL pattern)
+	if err := s.buffer.Save(report); err != nil {
+		return fmt.Errorf("failed to save to buffer: %w", err)
 	}
 
-	// Try to send via HTTP
-	if err := s.sendHTTP(data); err != nil {
-		// If buffer is enabled, save to buffer
-		if s.buffer != nil {
-			if bufErr := s.buffer.Save(report); bufErr != nil {
-				return fmt.Errorf("send failed: %w, buffer failed: %w", err, bufErr)
-			}
-		}
-		return fmt.Errorf("send failed and saved to buffer: %w", err)
-	}
-
-	// If send succeeded and buffer is enabled, try to flush old buffered data
-	if s.buffer != nil {
-		go s.FlushBuffer()
-	}
-
+	logger.Debug("Report saved to buffer", logger.String("server_id", report.ServerID))
 	return nil
 }
 
@@ -96,69 +96,185 @@ func (s *Sender) sendHTTP(data []byte) error {
 	return nil
 }
 
-// FlushBuffer attempts to send all buffered reports
-// Processes files one at a time, only deleting after successful send
-func (s *Sender) FlushBuffer() {
-	if s.buffer == nil {
-		return
-	}
+// StartDraining starts the background goroutine that continuously drains the buffer
+// It should be called once after creating the sender
+func (s *Sender) StartDraining() {
+	go s.drainLoop()
+	logger.Info("Started buffer drain goroutine with random jitter")
+}
 
-	// Get all buffer files (oldest first)
-	files, err := s.buffer.GetBufferFiles()
-	if err != nil {
-		logger.Warn("Failed to get buffer files for flushing", logger.Err(err))
-		return
-	}
+// drainLoop continuously drains the buffer with random delays
+func (s *Sender) drainLoop() {
+	for {
+		// Check if context is cancelled
+		select {
+		case <-s.drainCtx.Done():
+			logger.Info("Drain goroutine stopped")
+			return
+		default:
+		}
 
-	// Process each file
-	for _, filePath := range files {
-		// Load reports from this file
-		reports, err := s.buffer.LoadFile(filePath)
+		// Get all buffer files (oldest first)
+		files, err := s.buffer.GetBufferFiles()
 		if err != nil {
-			// Skip this file, try next one
-			logger.Warn("Failed to load buffer file, skipping", logger.String("file", filePath), logger.Err(err))
+			logger.Warn("Failed to get buffer files for draining", logger.Err(err))
+			s.randomDelay()
 			continue
 		}
 
-		// Try to send all reports from this file
-		allSentSuccessfully := true
-		for _, report := range reports {
-			data, err := report.ToJSON()
-			if err != nil {
-				logger.Debug("Failed to marshal buffered report, skipping", logger.Err(err))
-				continue
-			}
-
-			// Try to send
-			if err := s.sendHTTP(data); err != nil {
-				// Send failed - connection is down again
-				// Stop processing and keep this file for next time
-				allSentSuccessfully = false
-				break
-			}
+		// If no files to process, wait and check again
+		if len(files) == 0 {
+			s.randomDelay()
+			continue
 		}
 
-		// Only delete the file if ALL reports were sent successfully
-		if allSentSuccessfully {
-			if err := s.buffer.DeleteFile(filePath); err != nil {
-				logger.Error("Failed to delete buffer file after successful send", logger.String("file", filePath), logger.Err(err))
-			} else {
-				logger.Debug("Successfully flushed and deleted buffer file", logger.String("file", filePath))
-			}
-		} else {
-			// Connection failed - stop trying, we'll retry next time
-			break
+		// Process oldest file
+		filePath := files[0]
+		if err := s.processBufferFile(filePath); err != nil {
+			// Failed to send - keep file and retry after delay
+			logger.Debug("Failed to process buffer file, will retry", logger.String("file", filePath), logger.Err(err))
 		}
-	}
 
-	// Clean up old buffer files
-	if err := s.buffer.Cleanup(); err != nil {
-		logger.Warn("Failed to cleanup old buffer files", logger.Err(err))
+		// Wait random delay before next attempt
+		s.randomDelay()
 	}
 }
 
-// Close closes the sender
+// processBufferFile attempts to send all reports from a buffer file
+// Returns error if any report fails to send (file is kept for retry)
+// If file is corrupted, sends N/A metrics and deletes the corrupted file
+func (s *Sender) processBufferFile(filePath string) error {
+	// Load reports from this file
+	reports, err := s.buffer.LoadFile(filePath)
+	if err != nil {
+		// File is corrupted - send N/A metrics and delete the file
+		logger.Warn("Corrupted buffer file detected, sending N/A metrics",
+			logger.String("file", filePath),
+			logger.Err(err))
+
+		if sendErr := s.sendCorruptedFileMarker(filePath); sendErr != nil {
+			logger.Error("Failed to send N/A marker for corrupted file",
+				logger.String("file", filePath),
+				logger.Err(sendErr))
+			// Continue anyway - we want to delete the corrupted file
+		}
+
+		// Delete corrupted file to prevent infinite loop
+		if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
+			logger.Error("Failed to delete corrupted buffer file",
+				logger.String("file", filePath),
+				logger.Err(delErr))
+		} else {
+			logger.Info("Deleted corrupted buffer file", logger.String("file", filePath))
+		}
+
+		return nil // Don't return error - we handled it by deleting
+	}
+
+	// If no reports in file (empty), just delete it
+	if len(reports) == 0 {
+		logger.Warn("Empty buffer file, deleting", logger.String("file", filePath))
+		if err := s.buffer.DeleteFile(filePath); err != nil {
+			logger.Error("Failed to delete empty buffer file", logger.String("file", filePath), logger.Err(err))
+		}
+		return nil
+	}
+
+	// Try to send all reports from this file
+	for _, report := range reports {
+		data, err := report.ToJSON()
+		if err != nil {
+			logger.Debug("Failed to marshal buffered report, skipping", logger.Err(err))
+			continue
+		}
+
+		// Try to send
+		if err := s.sendHTTP(data); err != nil {
+			// Send failed - return error to keep file
+			return fmt.Errorf("failed to send report: %w", err)
+		}
+
+		logger.Debug("Successfully sent buffered report", logger.String("server_id", report.ServerID))
+	}
+
+	// All reports sent successfully - delete the file
+	if err := s.buffer.DeleteFile(filePath); err != nil {
+		logger.Error("Failed to delete buffer file after successful send", logger.String("file", filePath), logger.Err(err))
+	} else {
+		logger.Info("Successfully drained buffer file", logger.String("file", filePath), logger.Int("reports", len(reports)))
+	}
+
+	// Periodically clean up old buffer files
+	if err := s.buffer.Cleanup(); err != nil {
+		logger.Warn("Failed to cleanup old buffer files", logger.Err(err))
+	}
+
+	return nil
+}
+
+// sendCorruptedFileMarker sends a report with all metrics set to null (N/A)
+// This keeps the timeline intact when a corrupted buffer file is encountered
+func (s *Sender) sendCorruptedFileMarker(filePath string) error {
+	// Get hostname for the report
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+
+	// Create a report with all null metrics
+	naReport := &metrics.Report{
+		ServerID:   s.config.Agent.ServerID,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Hostname:   hostname,
+		SystemInfo: nil, // Will serialize as null
+		CPU:        nil,
+		Memory:     nil,
+		Disk:       nil,
+		Network:    nil,
+		Uptime:     nil,
+		Processes:  nil,
+	}
+
+	data, err := naReport.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal N/A report: %w", err)
+	}
+
+	// Send the N/A marker
+	if err := s.sendHTTP(data); err != nil {
+		return fmt.Errorf("failed to send N/A marker: %w", err)
+	}
+
+	logger.Info("Sent N/A metrics marker for corrupted file", logger.String("file", filePath))
+	return nil
+}
+
+// randomDelay waits for a random duration between 0 and the configured interval
+// This distributes load across the interval window
+func (s *Sender) randomDelay() {
+	// Generate random delay: 0 to full interval
+	maxDelay := s.config.Agent.Interval
+	delay := time.Duration(s.rng.Int63n(int64(maxDelay)))
+
+	logger.Debug("Waiting random delay before next drain attempt", logger.Duration("delay", delay))
+
+	// Use select to make delay cancellable
+	select {
+	case <-s.drainCtx.Done():
+		return
+	case <-time.After(delay):
+		return
+	}
+}
+
+// Close stops the drain goroutine and closes the sender
 func (s *Sender) Close() error {
+	// Stop drain goroutine
+	if s.drainStop != nil {
+		s.drainStop()
+	}
+
+	// Close buffer
 	if s.buffer != nil {
 		return s.buffer.Close()
 	}
