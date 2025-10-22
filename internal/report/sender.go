@@ -218,78 +218,6 @@ func (s *Sender) processBatch(filePaths []string) error {
 	return nil
 }
 
-// processBufferFile attempts to send all reports from a buffer file (DEPRECATED - kept for compatibility)
-// Returns error if any report fails to send (file is kept for retry)
-// If file is corrupted, sends N/A metrics and deletes the corrupted file
-func (s *Sender) processBufferFile(filePath string) error {
-	// Load reports from this file
-	reports, err := s.buffer.LoadFile(filePath)
-	if err != nil {
-		// File is corrupted - send N/A metrics and delete the file
-		logger.Warn("Corrupted buffer file detected, sending N/A metrics",
-			logger.String("file", filePath),
-			logger.Err(err))
-
-		if sendErr := s.sendCorruptedFileMarker(filePath); sendErr != nil {
-			logger.Error("Failed to send N/A marker for corrupted file",
-				logger.String("file", filePath),
-				logger.Err(sendErr))
-			// Continue anyway - we want to delete the corrupted file
-		}
-
-		// Delete corrupted file to prevent infinite loop
-		if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
-			logger.Error("Failed to delete corrupted buffer file",
-				logger.String("file", filePath),
-				logger.Err(delErr))
-		} else {
-			logger.Info("Deleted corrupted buffer file", logger.String("file", filePath))
-		}
-
-		return nil // Don't return error - we handled it by deleting
-	}
-
-	// If no reports in file (empty), just delete it
-	if len(reports) == 0 {
-		logger.Warn("Empty buffer file, deleting", logger.String("file", filePath))
-		if err := s.buffer.DeleteFile(filePath); err != nil {
-			logger.Error("Failed to delete empty buffer file", logger.String("file", filePath), logger.Err(err))
-		}
-		return nil
-	}
-
-	// Try to send all reports from this file
-	for _, report := range reports {
-		data, err := report.ToJSON()
-		if err != nil {
-			logger.Debug("Failed to marshal buffered report, skipping", logger.Err(err))
-			continue
-		}
-
-		// Try to send
-		if err := s.sendHTTP(data); err != nil {
-			// Send failed - return error to keep file
-			return fmt.Errorf("failed to send report: %w", err)
-		}
-
-		logger.Debug("Successfully sent buffered report", logger.String("server_id", report.ServerID))
-	}
-
-	// All reports sent successfully - delete the file
-	if err := s.buffer.DeleteFile(filePath); err != nil {
-		logger.Error("Failed to delete buffer file after successful send", logger.String("file", filePath), logger.Err(err))
-	} else {
-		logger.Info("Successfully drained buffer file", logger.String("file", filePath), logger.Int("reports", len(reports)))
-	}
-
-	// Periodically clean up old buffer files
-	if err := s.buffer.Cleanup(); err != nil {
-		logger.Warn("Failed to cleanup old buffer files", logger.Err(err))
-	}
-
-	return nil
-}
-
 // sendBatch sends an array of reports to the server
 func (s *Sender) sendBatch(reports []*metrics.Report) error {
 	// Marshal array of reports to JSON
@@ -325,43 +253,6 @@ func (s *Sender) createNAReport() *metrics.Report {
 		Uptime:     nil,
 		Processes:  nil,
 	}
-}
-
-// sendCorruptedFileMarker sends a report with all metrics set to null (N/A)
-// This keeps the timeline intact when a corrupted buffer file is encountered
-func (s *Sender) sendCorruptedFileMarker(filePath string) error {
-	// Get hostname for the report
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
-	}
-
-	// Create a report with all null metrics
-	naReport := &metrics.Report{
-		ServerID:   s.config.Agent.ServerID,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-		Hostname:   hostname,
-		SystemInfo: nil, // Will serialize as null
-		CPU:        nil,
-		Memory:     nil,
-		Disk:       nil,
-		Network:    nil,
-		Uptime:     nil,
-		Processes:  nil,
-	}
-
-	data, err := naReport.ToJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal N/A report: %w", err)
-	}
-
-	// Send the N/A marker
-	if err := s.sendHTTP(data); err != nil {
-		return fmt.Errorf("failed to send N/A marker: %w", err)
-	}
-
-	logger.Info("Sent N/A metrics marker for corrupted file", logger.String("file", filePath))
-	return nil
 }
 
 // randomDelay waits for a random duration between 0 and the configured interval
