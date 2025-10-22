@@ -16,6 +16,8 @@ type SystemInfo struct {
 	DistroVer    string `json:"distro_version"`
 	Architecture string `json:"architecture"`
 	CPUCores     int    `json:"cpu_cores"`
+	IPv4         string `json:"ipv4,omitempty"`
+	IPv6         string `json:"ipv6,omitempty"`
 }
 
 var cachedSystemInfo *SystemInfo
@@ -50,6 +52,11 @@ func CollectSystemInfo() (*SystemInfo, error) {
 		info.Distro = distro
 		info.DistroVer = version
 	}
+
+	// Get IP addresses (optional - may be empty if not available)
+	ipv4, ipv6 := collectIPAddresses()
+	info.IPv4 = ipv4
+	info.IPv6 = ipv6
 
 	cachedSystemInfo = info
 	return info, nil
