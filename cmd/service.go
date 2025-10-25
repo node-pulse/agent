@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/node-pulse/agent/internal/config"
+	"github.com/node-pulse/agent/internal/installer"
 	"github.com/node-pulse/agent/internal/pidfile"
 	"github.com/spf13/cobra"
 )
@@ -128,7 +129,29 @@ func installService(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to enable service: %w", err)
 	}
 
+	// Install updater timer
+	fmt.Println("Installing updater timer...")
+	if err := installer.InstallTimer(); err != nil {
+		return fmt.Errorf("failed to install updater timer: %w", err)
+	}
+
+	// Reload systemd (for timer units)
+	if err := runSystemctl("daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd: %w", err)
+	}
+
+	// Enable updater timer
+	if err := runSystemctl("enable", "node-pulse-updater.timer"); err != nil {
+		return fmt.Errorf("failed to enable updater timer: %w", err)
+	}
+
+	// Start updater timer
+	if err := runSystemctl("start", "node-pulse-updater.timer"); err != nil {
+		return fmt.Errorf("failed to start updater timer: %w", err)
+	}
+
 	fmt.Println("Service installed and enabled successfully!")
+	fmt.Println("Updater timer installed and started (checks for updates every 10 minutes)")
 	fmt.Println("\nTo start the service, run:")
 	fmt.Printf("  sudo pulse service start\n")
 	return nil
@@ -216,12 +239,22 @@ func uninstallService(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to remove service file: %w", err)
 	}
 
+	// Stop and disable updater timer
+	fmt.Println("Uninstalling updater timer...")
+	runSystemctl("stop", "node-pulse-updater.timer")
+	runSystemctl("disable", "node-pulse-updater.timer")
+
+	// Remove timer units
+	if err := installer.UninstallTimer(); err != nil {
+		fmt.Printf("Warning: failed to uninstall timer: %v\n", err)
+	}
+
 	// Reload systemd
 	if err := runSystemctl("daemon-reload"); err != nil {
 		return fmt.Errorf("failed to reload systemd: %w", err)
 	}
 
-	fmt.Println("Service uninstalled successfully!")
+	fmt.Println("Service and updater timer uninstalled successfully!")
 	return nil
 }
 

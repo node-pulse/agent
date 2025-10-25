@@ -63,8 +63,12 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
   - Provides helpful message if systemd service is running
 - **cmd/watch.go**: TUI dashboard using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for real-time metric visualization
 - **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
+  - Also manages updater timer installation/uninstallation
 - **cmd/setup.go**: Interactive setup wizard for first-time configuration (command: `pulse setup`)
 - **cmd/status.go**: Shows comprehensive agent status including server ID, config, service status, buffer state, and logs
+- **cmd/update.go**: Self-update command that checks for new versions and performs updates
+  - Called automatically by systemd timer every 10 minutes (UTC-aligned)
+  - Can also be run manually: `pulse update`
 
 ### Metrics Collection (internal/metrics/)
 Each metric type has its own collector that reads from `/proc` filesystem:
@@ -122,6 +126,40 @@ Tracks hourly statistics for the dashboard:
 - Total upload/download bytes
 - Stats reset each hour automatically
 
+### Updater (internal/updater/)
+Self-update system for the agent:
+
+- **updater.go**: Core updater logic
+  - Checks version API endpoint for new releases
+  - Downloads new binary with SHA256 checksum verification
+  - Atomically replaces `/usr/local/bin/pulse`
+  - Restarts agent service via systemd
+  - Includes automatic rollback on failure
+- **Version endpoint**: `GET /agent/version?version={current}&os={os}&arch={arch}`
+  - Returns 204 No Content if no update available
+  - Returns 200 OK with JSON if update available:
+    ```json
+    {
+      "version": "1.1.0",
+      "url": "https://releases.nodepulse.io/agent/1.1.0/pulse-linux-amd64",
+      "checksum": "abc123..."
+    }
+    ```
+
+### Updater Timer (internal/installer/timer.go)
+Systemd timer configuration for automatic updates:
+
+- **Timer**: `/etc/systemd/system/node-pulse-updater.timer`
+  - Fires at UTC-aligned 10-minute intervals: `:00`, `:10`, `:20`, `:30`, `:40`, `:50`
+  - Uses `OnCalendar=*:00,10,20,30,40,50:00` for precise timing
+  - Includes random delay (0-60s) to avoid thundering herd
+  - Persistent mode: fires on boot if missed while powered off
+- **Service**: `/etc/systemd/system/node-pulse-updater.service`
+  - Type: oneshot (exits after each update check)
+  - Executes: `/usr/local/bin/pulse update`
+  - 5-minute timeout for download + restart
+  - Logs to systemd journal as `node-pulse-updater`
+
 ### PID File Management (internal/pidfile/)
 Handles process tracking and prevents duplicate agent runs:
 
@@ -157,18 +195,29 @@ Handles process tracking and prevents duplicate agent runs:
 
 ## Agent Main Loop (cmd/start.go)
 
+The agent runs as a **long-running daemon** (NOT a one-shot process):
+
 1. Load configuration
 2. Initialize logger
-3. Create HTTP sender (with optional buffer)
+3. Create HTTP sender with buffer (always enabled)
 4. Setup graceful shutdown on SIGINT/SIGTERM
-5. Collect and send immediately on start
-6. Enter ticker loop at configured interval (5s, 10s, 30s, or 1m)
-7. On each tick:
+5. **Start background drain goroutine** (continuously attempts to send buffered reports)
+6. Collect and buffer metrics immediately on start
+7. Enter infinite ticker loop at configured interval (5s, 10s, 30s, or 1m)
+8. On each tick:
    - Call `metrics.Collect()` to gather all metrics
+   - **Synchronously save to buffer** (Write-Ahead Log pattern)
    - Record stats (for TUI dashboard)
-   - Call `sender.Send()` to POST to server
-   - On success: record success, trigger background buffer flush
-   - On failure: record failure, report is auto-buffered
+   - Return immediately (no HTTP blocking)
+9. **Background goroutine** (runs concurrently):
+   - Continuously checks for buffered reports
+   - Batches up to `batch_size` reports (default: 5)
+   - Attempts HTTP POST to server
+   - On success: deletes sent files, triggers cleanup
+   - On failure: keeps files, waits random delay (0 to interval), retries
+   - Includes random jitter to avoid thundering herd
+
+**Key Design Point**: The agent is a monolithic process that does collection, buffering, and sending all in one binary. Systemd keeps it running (with auto-restart), while the internal ticker controls collection frequency.
 
 ## TUI Dashboard (cmd/watch.go)
 
@@ -181,13 +230,32 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipglos
 - Auto-refreshes at configured interval
 - Press `r` to force refresh, `q` to quit
 
+## Self-Update Flow
+
+When the updater timer fires (every 10 minutes):
+
+1. **Check version**: `pulse update` calls `GET /agent/version?version={current}&os=linux&arch=amd64`
+2. **Server response**:
+   - 204 No Content → Agent is up to date, exit
+   - 200 OK with JSON → Update available, proceed
+3. **Download**: Fetch new binary from URL in response
+4. **Verify**: Calculate SHA256 checksum, compare with expected
+5. **Stop agent**: `systemctl stop node-pulse` (graceful shutdown)
+6. **Backup**: Copy current `/usr/local/bin/pulse` to `/usr/local/bin/pulse.backup`
+7. **Replace**: Atomically move new binary to `/usr/local/bin/pulse`
+8. **Start agent**: `systemctl start node-pulse` (loads new version)
+9. **Cleanup**: Remove backup if successful
+10. **Rollback**: On any failure, restore from backup and restart
+
+**Downtime**: Typically 1-2 seconds during the stop → replace → start cycle.
+
 ## Important Platform Constraints
 
 - **Linux-only**: All metrics depend on `/proc` filesystem
 - **Architectures**: Built for amd64 and arm64 only
 - **Permissions**:
   - Regular user can run `pulse start`, `pulse start -d`, `pulse stop`, and `pulse watch`
-  - Root required for `pulse service` commands and `pulse setup` (writes to `/etc` and `/var`)
+  - Root required for `pulse service`, `pulse setup`, and `pulse update` commands (writes to `/etc` and `/var`)
 
 ## Testing Notes
 
