@@ -20,6 +20,8 @@ type Report struct {
 	Network    *NetworkMetrics  `json:"network"`
 	Uptime     *UptimeMetrics   `json:"uptime"`
 	Processes  *ProcessMetrics  `json:"processes"`
+	IPv4       string           `json:"ipv4,omitempty"`
+	IPv6       string           `json:"ipv6,omitempty"`
 }
 
 // Collect gathers all metrics and creates a complete report
@@ -34,6 +36,11 @@ func Collect(serverID string) (*Report, error) {
 		ServerID:  serverID,
 		Hostname:  hostname,
 	}
+
+	// Collect IP addresses
+	ipv4, ipv6 := collectIPAddresses()
+	report.IPv4 = ipv4
+	report.IPv6 = ipv6
 
 	// Collect system info (cached after first call)
 	if sysInfo, err := CollectSystemInfo(); err == nil {
