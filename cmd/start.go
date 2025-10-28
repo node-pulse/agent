@@ -166,13 +166,8 @@ func scrapeAndSendWithTimestamp(scraper *prometheus.Scraper, sender *report.Send
 
 	logger.Debug("Prometheus data scraped and buffered",
 		logger.Int("bytes", len(dataWithTimestamp)),
-		logger.Time("collection_time", collectionTime))
+		logger.String("collection_time", collectionTime.Format(time.RFC3339)))
 	return nil
-}
-
-// Legacy function kept for backwards compatibility
-func scrapeAndSend(scraper *prometheus.Scraper, sender *report.Sender, serverID string) error {
-	return scrapeAndSendWithTimestamp(scraper, sender, serverID, time.Now().Truncate(5*time.Second))
 }
 
 func runInBackground() error {
