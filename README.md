@@ -1,49 +1,93 @@
-# NodePulse Agent
+# NodePulse Agent v2.0
 
-A lightweight, self-contained monitoring agent written in Go. It collects system metrics (CPU, memory, network I/O, and uptime) and reports them to your NodePulse control server via HTTP.
+A lightweight Prometheus forwarder written in Go. It scrapes metrics from `node_exporter` and forwards them to your NodePulse dashboard via HTTP.
 
 **Lightweight & Efficient:**
 
 - Single binary, <15 MB
 - <40 MB RAM usage
-- Real-time metrics with configurable intervals (5s to 1m)
+- Standard 15-second scrape interval
+
+## What's New in v2.0
+
+**Major Architecture Change:**
+
+- ✅ **Prometheus-based**: Scrapes `node_exporter` (100+ metrics)
+- ✅ **Simpler**: No custom metrics collection
+- ✅ **Standard**: Uses Prometheus text format
+- ✅ **Buffered**: Write-Ahead Log pattern for reliability
+- ❌ **No TUI**: `pulse watch` command removed
+- ❌ **No JSON**: Prometheus text format only
+
+**Why Prometheus?**
+
+- Industry standard for metrics collection
+- Rich ecosystem of exporters
+- 100+ system metrics out of the box
+- Battle-tested reliability
 
 ## Features
 
-- **Real-time Metrics**: CPU usage, memory usage, network I/O, and system uptime
-- **Configurable Intervals**: 5s, 10s, 30s, or 1 minute collection intervals
-- **Reliable Delivery**: HTTP-based reporting with automatic buffering on failure
-- **Smart Buffering**: Failed reports are stored in hourly JSONL files (48-hour retention)
-- **Service Management**: Easy systemd service installation and management
-- **Live View**: Built-in TUI for viewing metrics in real-time
+- **Prometheus Scraping**: Scrapes `node_exporter` on `localhost:9100`
+- **Reliable Delivery**: HTTP-based forwarding with automatic buffering
+- **Smart Buffering**: Failed reports stored as `.prom` files (48-hour retention)
+- **Random Jitter**: Distributes load across scrape interval window
+- **Batch Processing**: Sends up to 5 buffered reports per request
+- **Service Management**: Easy systemd service installation
 - **Cross-Platform**: Builds for both amd64 and arm64 architectures
 
-## Screenshots
+## Prerequisites
 
-### Real-time Metrics ( run `pulse watch`)
+**You must install `node_exporter` first:**
 
-![Real-time monitoring dashboard](screenshots/pulse-watch.png)
+```bash
+# Download node_exporter
+wget https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz
+tar -xzf node_exporter-1.8.2.linux-amd64.tar.gz
+sudo mv node_exporter-1.8.2.linux-amd64/node_exporter /usr/local/bin/
+sudo chmod +x /usr/local/bin/node_exporter
+
+# Create systemd service
+sudo tee /etc/systemd/system/node_exporter.service <<EOF
+[Unit]
+Description=Prometheus Node Exporter
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/node_exporter --web.listen-address=127.0.0.1:9100
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Start service
+sudo systemctl daemon-reload
+sudo systemctl enable node_exporter
+sudo systemctl start node_exporter
+
+# Verify
+curl http://localhost:9100/metrics
+```
+
+**Security: Block Port 9100 Externally**
+
+⚠️ **CRITICAL**: Port 9100 exposes sensitive system information!
+
+```bash
+# Using UFW (Ubuntu/Debian)
+sudo ufw deny 9100/tcp
+
+# Using iptables
+sudo iptables -A INPUT -p tcp --dport 9100 ! -s 127.0.0.1 -j DROP
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
 
 ## Installation
 
-### Quick Install (Recommended)
-
-The fastest way to install the NodePulse agent:
-
-```bash
-curl -fsSL https://get.nodepulse.sh | sudo bash
-```
-
-This script will automatically:
-
-- Detect your architecture (amd64 or arm64)
-- Download the latest release
-- Install the binary to `/usr/local/bin/pulse`
-- Set up necessary permissions
-
 ### From Binary
 
-<details>
 Download the latest release for your architecture:
 
 ```bash
@@ -60,11 +104,7 @@ sudo mv pulse /usr/local/bin/
 sudo chmod +x /usr/local/bin/pulse
 ```
 
-</details>
-
 ### From Source
-
-<details>
 
 ```bash
 git clone https://github.com/node-pulse/agent.git
@@ -74,24 +114,21 @@ sudo mv pulse /usr/local/bin/
 sudo chmod +x /usr/local/bin/pulse
 ```
 
-</details>
-
 ## Usage
 
 ### Initialize Configuration (First Time Setup)
 
 ```bash
-sudo pulse setup
+sudo pulse setup --yes --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id <your-uuid>
 ```
 
-Interactive setup wizard that:
+Quick setup wizard that:
 
 - Creates necessary directories (`/etc/node-pulse`, `/var/lib/node-pulse`)
-- Generates and persists server ID
 - Creates configuration file with your settings
-- Guides you through endpoint and interval configuration
+- Uses provided server ID (assigned by dashboard when adding server)
 
-Use `--yes` flag for quick mode with defaults.
+**Server ID**: When you add a server in the dashboard, it will provide a UUID. Pass this as `--server-id`.
 
 ### Running the Agent
 
@@ -142,15 +179,7 @@ Benefits:
 - Managed by systemd (no PID file needed)
 - Stop with: `sudo pulse service stop`
 
-**Important**: `pulse stop` will not stop systemd-managed agents. If you try to stop a systemd service with `pulse stop`, you'll see a helpful message directing you to use `pulse service stop` instead.
-
-### Watch Live Metrics
-
-```bash
-pulse watch
-```
-
-Press `q` to quit the live view.
+**Important**: `pulse stop` will not stop systemd-managed agents. Use `pulse service stop` instead.
 
 ### Check Agent Status
 
@@ -170,8 +199,8 @@ Server ID:     a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Persisted at:  /var/lib/node-pulse/server_id
 
 Config File:   /etc/node-pulse/nodepulse.yml
-Endpoint:      https://api.nodepulse.io/metrics
-Interval:      5s
+Endpoint:      https://dashboard.nodepulse.io/metrics/prometheus
+Interval:      15s
 
 Agent:         running (via systemd)
 
@@ -220,25 +249,30 @@ sudo pulse service uninstall
 
 ## Configuration
 
-Create a configuration file at `/etc/node-pulse/nodepulse.yml`:
+Configuration file at `/etc/node-pulse/nodepulse.yml`:
 
 ```yaml
 server:
-  endpoint: "https://api.nodepulse.io/metrics"
-  timeout: 3s
+  endpoint: "https://dashboard.nodepulse.io/metrics/prometheus"
+  timeout: 5s
 
 agent:
-  server_id: "your-unique-uuid-here" # Required: UUID to identify this server
-  interval: 5s # Options: 5s, 10s, 30s, 1m
+  server_id: "550e8400-e29b-41d4-a716-446655440000"  # From dashboard
+  interval: 15s  # Default (Prometheus standard)
+
+prometheus:
+  enabled: true
+  endpoint: "http://localhost:9100/metrics"
+  timeout: 3s
 
 buffer:
-  enabled: true
   path: "/var/lib/node-pulse/buffer"
   retention_hours: 48
+  batch_size: 5
 
 logging:
-  level: "info" # Options: debug, info, warn, error
-  output: "stdout" # Options: stdout, file, both
+  level: "info"  # Options: debug, info, warn, error
+  output: "stdout"  # Options: stdout, file, both
   file:
     path: "/var/log/node-pulse/agent.log"
     max_size_mb: 10
@@ -247,19 +281,35 @@ logging:
     compress: true
 ```
 
-### Logging Configuration:
+### Configuration Notes
+
+**Hardcoded Defaults:**
+
+Most settings use hardcoded defaults and are **not configurable** during Ansible deployment:
+- `interval`: 15s (Prometheus standard)
+- `timeout`: 5s
+- `prometheus.endpoint`: `http://localhost:9100/metrics`
+- `buffer.retention_hours`: 48
+- `buffer.batch_size`: 5
+- `logging.*`: All logging settings
+
+**Configurable Fields (Ansible Deployment):**
+
+Only **TWO** fields are configurable:
+1. `server.endpoint`: Dashboard URL (e.g., `https://dashboard.nodepulse.io/metrics/prometheus`)
+2. `agent.server_id`: UUID assigned by dashboard when adding server
+
+### Logging Configuration
 
 The agent supports flexible logging with the following options:
 
 - **level**: Set log verbosity (`debug`, `info`, `warn`, `error`)
-
-  - `debug`: Verbose diagnostic information for troubleshooting
-  - `info`: General informational messages about normal operation (default)
-  - `warn`: Potentially harmful situations that don't prevent operation
-  - `error`: Error events that might still allow operation to continue
+  - `debug`: Verbose diagnostic information
+  - `info`: General informational messages (default)
+  - `warn`: Potentially harmful situations
+  - `error`: Error events
 
 - **output**: Choose where logs are written (`stdout`, `file`, `both`)
-
   - `stdout`: Output to console/terminal (default, recommended for systemd)
   - `file`: Write to log file with automatic rotation
   - `both`: Output to both console and file
@@ -271,124 +321,82 @@ The agent supports flexible logging with the following options:
   - `max_age_days`: Maximum age in days for old log files (default: 7)
   - `compress`: Compress rotated logs with gzip (default: true)
 
-### Server ID Generation & Persistence:
+### Server ID Generation & Persistence
 
-The server ID uniquely identifies your server in the NodePulse system. The agent handles this automatically:
+The server ID uniquely identifies your server in the NodePulse system:
 
-- If you leave `server_id` as the placeholder or omit it, the agent will **auto-generate** a UUID on first run
-- The generated UUID is automatically persisted to disk at the first writable location (in order):
-  1. `/var/lib/node-pulse/server_id` (preferred for system-wide installations)
-  2. `/etc/node-pulse/server_id` (alternative system location)
-  3. `~/.node-pulse/server_id` (user home directory)
-  4. `./server_id` (fallback to current directory)
-- The same UUID will be reused on subsequent runs, even if you don't set it in the config
-- The persisted ID takes precedence over the config file to maintain consistency
-- You can check where your server ID is stored with: `pulse status`
-- You can also manually set a UUID in the config if you prefer:
-  - Linux/Mac: `uuidgen`
-  - PowerShell: `New-Guid`
-
-Or use the included `nodepulse.yml` as a template:
-
-```bash
-sudo mkdir -p /etc/node-pulse
-sudo cp nodepulse.yml /etc/node-pulse/
-sudo nano /etc/node-pulse/nodepulse.yml  # Edit your endpoint
-```
+- **Dashboard Assignment**: When you add a server in the dashboard, it assigns a UUID
+- **Ansible Deployment**: Pass the UUID as `server_id` variable
+- **Persistence**: The agent stores the ID in `/var/lib/node-pulse/server_id`
+- **Fallback Locations**: `/etc/node-pulse/server_id`, `~/.node-pulse/server_id`, `./server_id`
 
 ## Metrics Collected
 
-### System Information (Static)
+The agent forwards 100+ metrics from `node_exporter`, including:
 
-- Hostname
-- Kernel name and version (from `/proc/version`)
-- Linux distribution and version (from `/etc/os-release`)
-- Architecture (amd64, arm64)
-- CPU core count
+### System Information
+- Hostname, kernel version, OS distribution
+- CPU cores, architecture
 
-**Note**: System info is collected once at startup and cached (doesn't change).
+### CPU Metrics
+- CPU usage per core
+- System, user, idle, iowait times
+- CPU frequency, thermal throttling
 
-### CPU
+### Memory Metrics
+- Total, used, free, available memory
+- Swap usage
+- Memory pressure
 
-- Usage percentage (calculated from `/proc/stat`)
+### Disk Metrics
+- Disk I/O operations (reads/writes)
+- Disk space usage per mount point
+- Filesystem info
 
-### Memory
+### Network Metrics
+- Network I/O (bytes sent/received)
+- Packet counts, errors, drops
+- TCP connection states
 
-- Used MB
-- Total MB
-- Usage percentage (calculated from `/proc/meminfo`)
+### System Metrics
+- System uptime
+- Load average (1m, 5m, 15m)
+- Process counts
+- File descriptor usage
 
-### Network
+**For full list**: Run `curl http://localhost:9100/metrics` to see all available metrics.
 
-- Upload bytes (delta since last collection)
-- Download bytes (delta since last collection)
-- Collected from `/proc/net/dev` (excludes loopback interface)
+## Prometheus Text Format
 
-### Uptime
+The agent forwards metrics in Prometheus text format:
 
-- System uptime in days (from `/proc/uptime`)
+```
+# HELP node_cpu_seconds_total Seconds the CPUs spent in each mode.
+# TYPE node_cpu_seconds_total counter
+node_cpu_seconds_total{cpu="0",mode="idle"} 123456.78
+node_cpu_seconds_total{cpu="0",mode="system"} 1234.56
+node_cpu_seconds_total{cpu="0",mode="user"} 2345.67
 
-## JSON Report Format
-
-```json
-{
-  "timestamp": "2025-10-13T14:30:00Z",
-  "server_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "hostname": "server-01",
-  "system_info": {
-    "hostname": "server-01",
-    "kernel": "Linux",
-    "kernel_version": "5.15.0-89-generic",
-    "distro": "Ubuntu",
-    "distro_version": "22.04.3 LTS (Jammy Jellyfish)",
-    "architecture": "amd64",
-    "cpu_cores": 8
-  },
-  "cpu": {
-    "usage_percent": 45.2
-  },
-  "memory": {
-    "used_mb": 2048,
-    "total_mb": 8192,
-    "usage_percent": 25.0
-  },
-  "network": {
-    "upload_bytes": 1024000,
-    "download_bytes": 2048000
-  },
-  "uptime": {
-    "days": 15.5
-  }
-}
+# HELP node_memory_MemTotal_bytes Memory information field MemTotal_bytes.
+# TYPE node_memory_MemTotal_bytes gauge
+node_memory_MemTotal_bytes 8.589934592e+09
 ```
 
-**Note**: `system_info` is collected once at startup and cached. It contains static system information that doesn't change during runtime.
+## Buffering Behavior (Write-Ahead Log Pattern)
 
-If a metric fails to collect, it will be `null`:
+When HTTP forwarding fails (timeout or error):
 
-```json
-{
-  "timestamp": "2025-10-13T14:30:00Z",
-  "hostname": "server-01",
-  "cpu": null,
-  "memory": { ... },
-  "network": { ... },
-  "uptime": { ... }
-}
-```
+1. **Metrics are saved to buffer first** (before sending)
+2. **Background goroutine drains buffer continuously** with random jitter
+3. **Format**: `/var/lib/node-pulse/buffer/YYYYMMDD-HHMMSS-<server_id>.prom`
+4. **Batch processing**: Sends up to 5 reports per request (configurable)
+5. **Oldest first**: Processes files in chronological order
+6. **Cleanup**: Files older than 48 hours are automatically deleted
 
-## Buffering Behavior
-
-When HTTP reporting fails (timeout or error):
-
-1. The report is appended to an hourly JSONL file in the buffer directory
-2. Format: `/var/lib/node-pulse/buffer/2025-10-13-14.jsonl`
-3. On next successful send, buffered reports are flushed in background:
-   - Processes files oldest-first (chronological order)
-   - Sends all reports from a file
-   - Only deletes the file after ALL reports are successfully sent
-   - If connection fails mid-flush, remaining files are kept for next retry
-4. Files older than 48 hours are automatically deleted during cleanup
+**Random Jitter:**
+- Distributes load across the scrape interval window
+- Prevents thundering herd problem with multiple agents
+- Example: With 15s interval, delay is random between 0-15s
 
 ## Building
 
@@ -434,11 +442,71 @@ make build-linux-arm64
 
 ## Requirements
 
-- **OS**: Linux (uses `/proc` filesystem)
+- **OS**: Linux (uses `node_exporter`)
 - **Architectures**: amd64, arm64
+- **Dependencies**: `node_exporter` running on `localhost:9100`
 - **Permissions**:
-  - Normal user for `pulse start`, `pulse start -d`, `pulse stop`, and `pulse watch`
+  - Normal user for `pulse start`, `pulse start -d`, `pulse stop`
   - Root (sudo) for `pulse service` commands and `pulse setup`
+
+## Data Retention
+
+**Dashboard Retention:** 7 days raw data
+
+- Raw Prometheus metrics stored for 7 days
+- After 7 days: automatic deletion (drop old partitions)
+- Storage estimate: ~3 TB for 1000 servers
+- Industry standard for self-hosted monitoring
+
+## Migration from v1.x
+
+### Breaking Changes
+
+1. **Configuration file changes:**
+   - New `prometheus` section required
+   - `server.endpoint` changes from `/metrics` to `/metrics/prometheus`
+   - Default interval changes from 5s to 15s
+   - Allowed intervals: `15s`, `30s`, `1m` (removed 5s, 10s)
+
+2. **Buffered data:**
+   - Old JSON buffer files will be ignored (data loss <48 hours)
+   - New buffer format stores Prometheus text format (`.prom` files)
+
+3. **Commands removed:**
+   - `pulse watch` no longer exists (TUI removed)
+
+### Migration Steps
+
+1. **Install node_exporter** (see Prerequisites above)
+2. **Stop old agent:**
+   ```bash
+   sudo pulse service stop
+   sudo pulse service uninstall
+   ```
+3. **Update agent binary:**
+   ```bash
+   sudo pulse update
+   # Or manually download v2.0
+   ```
+4. **Update config file:**
+   ```bash
+   sudo nano /etc/node-pulse/nodepulse.yml
+   # Add prometheus section, change interval to 15s
+   ```
+5. **Clear old buffer** (optional):
+   ```bash
+   sudo rm -rf /var/lib/node-pulse/buffer/*
+   ```
+6. **Reinstall service:**
+   ```bash
+   sudo pulse service install
+   sudo pulse service start
+   ```
+7. **Verify:**
+   ```bash
+   sudo pulse status
+   sudo journalctl -u node-pulse -f
+   ```
 
 ## Development
 
@@ -446,45 +514,48 @@ make build-linux-arm64
 
 ```
 agent/
-├── cmd/                  # CLI commands
-│   ├── root.go          # Root command
-│   ├── agent.go         # Agent runner
-│   ├── watch.go         # TUI watch
-│   └── service.go       # Service management
+├── cmd/                     # CLI commands
+│   ├── root.go             # Root command
+│   ├── start.go            # Agent runner (Prometheus scraper)
+│   ├── setup.go            # Setup wizard
+│   ├── service.go          # Service management
+│   ├── status.go           # Status display
+│   ├── stop.go             # Stop daemon
+│   └── update.go           # Self-updater
 ├── internal/
-│   ├── metrics/         # Metrics collection
-│   │   ├── cpu.go
-│   │   ├── memory.go
-│   │   ├── network.go
-│   │   ├── uptime.go
-│   │   └── report.go
-│   ├── report/          # HTTP sender & buffer
+│   ├── prometheus/         # Prometheus scraper
+│   │   ├── scraper.go
+│   │   └── scraper_test.go
+│   ├── report/             # HTTP sender & buffer
 │   │   ├── sender.go
-│   │   └── buffer.go
-│   └── config/          # Configuration
-│       └── config.go
-├── .goreleaser.yaml     # Release config
-├── nodepulse.yml        # Default config
+│   │   ├── buffer.go
+│   │   └── buffer_status.go
+│   ├── config/             # Configuration
+│   │   ├── config.go
+│   │   └── serverid.go
+│   ├── logger/             # Logging
+│   │   └── logger.go
+│   └── pidfile/            # PID file management
+│       └── pidfile.go
+├── .goreleaser.yaml        # Release config
+├── nodepulse.yml           # Example config
 └── main.go
 ```
 
 ### Testing
 
-The agent needs to run on a Linux system to collect metrics. You can test locally:
+The agent needs to run on a Linux system with `node_exporter`:
 
 ```bash
-# Run directly with go
+# Ensure node_exporter is running
+curl http://localhost:9100/metrics
+
+# Run agent directly with go
 go run . start
 
 # Or build and run
 make build
 ./build/pulse start
-```
-
-View metrics in another terminal:
-
-```bash
-./build/pulse watch
 ```
 
 ## License
