@@ -116,6 +116,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Main scraping loop
+	// Use ticker for interval, but align collection timestamps to interval boundaries
 	ticker := time.NewTicker(cfg.Agent.Interval)
 	defer ticker.Stop()
 
@@ -125,8 +126,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		logger.String("prometheus_endpoint", cfg.Prometheus.Endpoint),
 		logger.String("server_endpoint", cfg.Server.Endpoint))
 
-	// Scrape immediately on start
-	if err := scrapeAndSend(scraper, sender, cfg.Agent.ServerID); err != nil {
+	// Scrape immediately on start with aligned timestamp
+	collectionTime := time.Now().Truncate(cfg.Agent.Interval)
+	if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 		logger.Error("Initial scrape failed", logger.Err(err))
 	}
 
@@ -135,28 +137,42 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
-			if err := scrapeAndSend(scraper, sender, cfg.Agent.ServerID); err != nil {
+		case tickTime := <-ticker.C:
+			// Align collection time to interval boundary
+			collectionTime := tickTime.Truncate(cfg.Agent.Interval)
+			if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 				logger.Error("Scrape failed", logger.Err(err))
 			}
 		}
 	}
 }
 
-func scrapeAndSend(scraper *prometheus.Scraper, sender *report.Sender, serverID string) error {
+// scrapeAndSendWithTimestamp scrapes metrics and adds aligned collection timestamp
+func scrapeAndSendWithTimestamp(scraper *prometheus.Scraper, sender *report.Sender, serverID string, collectionTime time.Time) error {
 	// Scrape Prometheus exporter
 	data, err := scraper.Scrape()
 	if err != nil {
 		return fmt.Errorf("failed to scrape prometheus: %w", err)
 	}
 
+	// Add explicit timestamps to metrics (aligned to collection time)
+	// This ensures all agents report metrics at the same logical time boundaries
+	dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
+
 	// Save to buffer (WAL pattern - actual sending happens in background)
-	if err := sender.SendPrometheus(data, serverID); err != nil {
+	if err := sender.SendPrometheus(dataWithTimestamp, serverID); err != nil {
 		return fmt.Errorf("failed to buffer prometheus data: %w", err)
 	}
 
-	logger.Debug("Prometheus data scraped and buffered", logger.Int("bytes", len(data)))
+	logger.Debug("Prometheus data scraped and buffered",
+		logger.Int("bytes", len(dataWithTimestamp)),
+		logger.Time("collection_time", collectionTime))
 	return nil
+}
+
+// Legacy function kept for backwards compatibility
+func scrapeAndSend(scraper *prometheus.Scraper, sender *report.Sender, serverID string) error {
+	return scrapeAndSendWithTimestamp(scraper, sender, serverID, time.Now().Truncate(5*time.Second))
 }
 
 func runInBackground() error {
