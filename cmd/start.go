@@ -11,8 +11,8 @@ import (
 
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/logger"
-	"github.com/node-pulse/agent/internal/metrics"
 	"github.com/node-pulse/agent/internal/pidfile"
+	"github.com/node-pulse/agent/internal/prometheus"
 	"github.com/node-pulse/agent/internal/report"
 	"github.com/spf13/cobra"
 )
@@ -22,8 +22,8 @@ var daemonFlag bool
 // startCmd represents the start command
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Run the monitoring agent",
-	Long:  `Runs the agent in foreground, collecting and sending metrics at configured intervals.`,
+	Short: "Run the Prometheus forwarding agent",
+	Long:  `Scrapes node_exporter on localhost:9100 and forwards Prometheus metrics to the dashboard.`,
 	RunE:  runAgent,
 }
 
@@ -47,7 +47,6 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	isSystemdManaged := os.Getenv("INVOCATION_ID") != ""
 
 	// Only manage PID file if NOT running under systemd
-	// (systemd tracks the PID itself, and we don't want 'pulse stop' to kill systemd-managed processes)
 	if !isSystemdManaged {
 		// Check if agent is already running
 		isRunning, existingPid, err := pidfile.CheckRunning()
@@ -81,6 +80,18 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
+	// Create Prometheus scraper
+	scraper := prometheus.NewScraper(&prometheus.ScraperConfig{
+		Endpoint: cfg.Prometheus.Endpoint,
+		Timeout:  cfg.Prometheus.Timeout,
+	})
+
+	// Verify node_exporter is accessible on startup
+	if err := scraper.Verify(); err != nil {
+		logger.Error("Failed to verify Prometheus exporter - is node_exporter running?", logger.Err(err))
+		return fmt.Errorf("prometheus exporter verification failed: %w\nPlease ensure node_exporter is running on %s", err, cfg.Prometheus.Endpoint)
+	}
+
 	// Create report sender
 	sender, err := report.NewSender(cfg)
 	if err != nil {
@@ -89,7 +100,6 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	defer sender.Close()
 
 	// Start background draining goroutine (WAL pattern)
-	// This continuously sends buffered reports with random jitter
 	sender.StartDraining()
 
 	// Setup signal handling for graceful shutdown
@@ -105,55 +115,47 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Main collection loop
+	// Main scraping loop
 	ticker := time.NewTicker(cfg.Agent.Interval)
 	defer ticker.Stop()
 
 	logger.Info("Agent started",
 		logger.String("server_id", cfg.Agent.ServerID),
 		logger.Duration("interval", cfg.Agent.Interval),
-		logger.String("endpoint", cfg.Server.Endpoint))
+		logger.String("prometheus_endpoint", cfg.Prometheus.Endpoint),
+		logger.String("server_endpoint", cfg.Server.Endpoint))
 
-	// Collect and save to buffer immediately on start
-	if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-		logger.Error("Collection failed", logger.Err(err))
+	// Scrape immediately on start
+	if err := scrapeAndSend(scraper, sender, cfg.Agent.ServerID); err != nil {
+		logger.Error("Initial scrape failed", logger.Err(err))
 	}
 
-	// Then continue with ticker (collect and save to buffer at interval)
-	// Background goroutine will drain buffer with random jitter
+	// Continue with ticker
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := collectAndSend(sender, cfg.Agent.ServerID); err != nil {
-				logger.Error("Collection failed", logger.Err(err))
+			if err := scrapeAndSend(scraper, sender, cfg.Agent.ServerID); err != nil {
+				logger.Error("Scrape failed", logger.Err(err))
 			}
 		}
 	}
 }
 
-func collectAndSend(sender *report.Sender, serverID string) error {
-	// Collect metrics
-	metricsReport, err := metrics.Collect(serverID)
+func scrapeAndSend(scraper *prometheus.Scraper, sender *report.Sender, serverID string) error {
+	// Scrape Prometheus exporter
+	data, err := scraper.Scrape()
 	if err != nil {
-		return fmt.Errorf("failed to collect metrics: %w", err)
+		return fmt.Errorf("failed to scrape prometheus: %w", err)
 	}
 
-	// Record collection in stats
-	stats := metrics.GetGlobalStats()
-	stats.RecordCollection(metricsReport)
-
-	// Save to buffer (WAL pattern - actual sending happens in background with jitter)
-	if err := sender.Send(metricsReport); err != nil {
-		// Record failure (failed to save to buffer)
-		stats.RecordFailure()
-		return fmt.Errorf("failed to save to buffer: %w", err)
+	// Save to buffer (WAL pattern - actual sending happens in background)
+	if err := sender.SendPrometheus(data, serverID); err != nil {
+		return fmt.Errorf("failed to buffer prometheus data: %w", err)
 	}
 
-	// Record success (successfully buffered)
-	stats.RecordSuccess()
-	logger.Info("Report collected and buffered")
+	logger.Debug("Prometheus data scraped and buffered", logger.Int("bytes", len(data)))
 	return nil
 }
 

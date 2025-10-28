@@ -7,18 +7,18 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/node-pulse/agent/internal/logger"
 	"github.com/spf13/viper"
 )
 
 // Config represents the application configuration
 type Config struct {
-	Server     ServerConfig  `mapstructure:"server"`
-	Agent      AgentConfig   `mapstructure:"agent"`
-	Buffer     BufferConfig  `mapstructure:"buffer"`
-	Logging    logger.Config `mapstructure:"logging"`
-	ConfigFile string        `mapstructure:"-"` // Path to the config file that was loaded (not from config)
+	Server     ServerConfig      `mapstructure:"server"`
+	Agent      AgentConfig       `mapstructure:"agent"`
+	Prometheus PrometheusConfig  `mapstructure:"prometheus"`
+	Buffer     BufferConfig      `mapstructure:"buffer"`
+	Logging    logger.Config     `mapstructure:"logging"`
+	ConfigFile string            `mapstructure:"-"` // Path to the config file that was loaded (not from config)
 }
 
 // ServerConfig represents server connection settings
@@ -33,6 +33,13 @@ type AgentConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
 }
 
+// PrometheusConfig represents Prometheus scraping settings
+type PrometheusConfig struct {
+	Enabled  bool          `mapstructure:"enabled"`  // Enable Prometheus scraping (default: true)
+	Endpoint string        `mapstructure:"endpoint"` // e.g., "http://localhost:9100/metrics"
+	Timeout  time.Duration `mapstructure:"timeout"`  // HTTP timeout (default: 3s)
+}
+
 // BufferConfig represents buffer settings
 // Note: Buffer is always enabled in the new architecture (write-ahead log pattern)
 type BufferConfig struct {
@@ -44,11 +51,16 @@ type BufferConfig struct {
 var (
 	defaultConfig = Config{
 		Server: ServerConfig{
-			Endpoint: "https://api.nodepulse.io/metrics",
-			Timeout:  3 * time.Second,
+			Endpoint: "https://api.nodepulse.io/metrics/prometheus",
+			Timeout:  5 * time.Second,
 		},
 		Agent: AgentConfig{
-			Interval: 5 * time.Second,
+			Interval: 15 * time.Second, // Prometheus scraping typically 15s-1m
+		},
+		Prometheus: PrometheusConfig{
+			Enabled:  true,
+			Endpoint: "http://localhost:9100/metrics",
+			Timeout:  3 * time.Second,
 		},
 		Buffer: BufferConfig{
 			Path:           "/var/lib/node-pulse/buffer",
@@ -122,6 +134,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.endpoint", defaultConfig.Server.Endpoint)
 	v.SetDefault("server.timeout", defaultConfig.Server.Timeout)
 	v.SetDefault("agent.interval", defaultConfig.Agent.Interval)
+	v.SetDefault("prometheus.enabled", defaultConfig.Prometheus.Enabled)
+	v.SetDefault("prometheus.endpoint", defaultConfig.Prometheus.Endpoint)
+	v.SetDefault("prometheus.timeout", defaultConfig.Prometheus.Timeout)
 	v.SetDefault("buffer.path", defaultConfig.Buffer.Path)
 	v.SetDefault("buffer.retention_hours", defaultConfig.Buffer.RetentionHours)
 	v.SetDefault("buffer.batch_size", defaultConfig.Buffer.BatchSize)
@@ -157,10 +172,9 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("agent.interval must be positive")
 	}
 
-	// Validate allowed intervals
+	// Validate allowed intervals (Prometheus scraping typically 15s-1m)
 	allowedIntervals := []time.Duration{
-		5 * time.Second,
-		10 * time.Second,
+		15 * time.Second,
 		30 * time.Second,
 		1 * time.Minute,
 	}
@@ -173,7 +187,17 @@ func validate(cfg *Config) error {
 		}
 	}
 	if !valid {
-		return fmt.Errorf("agent.interval must be one of: 5s, 10s, 30s, 1m")
+		return fmt.Errorf("agent.interval must be one of: 15s, 30s, 1m")
+	}
+
+	// Validate Prometheus config
+	if cfg.Prometheus.Enabled {
+		if cfg.Prometheus.Endpoint == "" {
+			return fmt.Errorf("prometheus.endpoint is required when prometheus.enabled is true")
+		}
+		if cfg.Prometheus.Timeout <= 0 {
+			return fmt.Errorf("prometheus.timeout must be positive")
+		}
 	}
 
 	// Buffer is always enabled now
@@ -266,16 +290,12 @@ func ConfigExists(configPath string) bool {
 // RequireConfig checks if config exists and returns a helpful error if not
 func RequireConfig(configPath string) error {
 	if !ConfigExists(configPath) {
-		// Define color styles
-		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-		codeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
-
-		// Build colored error message
-		msg := errorStyle.Render("configuration file not found") + "\n\n" +
+		// Build error message
+		msg := "configuration file not found\n\n" +
 			"Please run setup first:\n" +
-			"  " + codeStyle.Render("pulse setup") + "\n\n" +
+			"  pulse setup\n\n" +
 			"Or specify a config file:\n" +
-			"  " + codeStyle.Render("pulse --config /path/to/nodepulse.yml <command>")
+			"  pulse --config /path/to/nodepulse.yml <command>"
 
 		return errors.New(msg)
 	}

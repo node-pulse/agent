@@ -37,21 +37,23 @@ func (b *Buffer) GetBufferStatus() BufferStatus {
 	var totalSize int64
 	var oldestTime time.Time
 
-	for _, filePath := range files {
-		// Count lines in file
-		reports, _ := b.readBufferFile(filePath)
-		status.ReportCount += len(reports)
+	// In v2.0, each file is a single Prometheus scrape
+	// File format: YYYYMMDD-HHMMSS-<server_id>.prom
+	status.ReportCount = len(files)
 
+	for _, filePath := range files {
 		// Get file size
 		if info, err := os.Stat(filePath); err == nil {
 			totalSize += info.Size()
 		}
 
-		// Get file timestamp
+		// Get file timestamp from filename
+		// Format: YYYYMMDD-HHMMSS-<server_id>.prom
 		filename := filepath.Base(filePath)
-		if len(filename) >= 13 {
-			timeStr := filename[:13]
-			if fileTime, err := time.Parse("2006-01-02-15", timeStr); err == nil {
+		if len(filename) >= 15 {
+			// Extract YYYYMMDD-HHMMSS part
+			timeStr := filename[:15]
+			if fileTime, err := time.Parse("20060102-150405", timeStr); err == nil {
 				if oldestTime.IsZero() || fileTime.Before(oldestTime) {
 					oldestTime = fileTime
 				}

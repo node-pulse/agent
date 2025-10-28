@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/logger"
-	"github.com/node-pulse/agent/internal/metrics"
 )
 
 // Buffer handles buffering failed reports to disk
@@ -33,27 +31,25 @@ func NewBuffer(cfg *config.Config) (*Buffer, error) {
 	}, nil
 }
 
-// Save saves a report to the buffer as an individual JSON file
-// Filename format: YYYYMMDD-HHMMSS.json (sortable by timestamp)
-func (b *Buffer) Save(report *metrics.Report) error {
+// SavePrometheus saves Prometheus text format data to buffer
+// Filename format: YYYYMMDD-HHMMSS-<server_id>.prom
+func (b *Buffer) SavePrometheus(data []byte, serverID string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Generate unique filename with timestamp (sortable, compact)
+	// Generate unique filename with timestamp
 	now := time.Now()
-	filename := fmt.Sprintf("%s.json", now.Format("20060102-150405"))
+	filename := fmt.Sprintf("%s-%s.prom", now.Format("20060102-150405"), serverID)
 	filePath := filepath.Join(b.config.Buffer.Path, filename)
 
-	// Convert to JSON
-	data, err := report.ToJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal report: %w", err)
-	}
-
-	// Write to individual file
+	// Write Prometheus text format to file
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write buffer file: %w", err)
 	}
+
+	logger.Debug("Saved Prometheus data to buffer",
+		logger.String("file", filename),
+		logger.Int("bytes", len(data)))
 
 	return nil
 }
@@ -66,13 +62,38 @@ func (b *Buffer) GetBufferFiles() ([]string, error) {
 	return b.getBufferFiles()
 }
 
-// LoadFile loads a single report from a buffer file
-// Returns a slice with one report for consistency with the API
-func (b *Buffer) LoadFile(filePath string) ([]*metrics.Report, error) {
+// PrometheusEntry represents a buffered Prometheus scrape
+type PrometheusEntry struct {
+	ServerID string
+	Data     []byte
+}
+
+// LoadPrometheusFile loads Prometheus text format from a buffer file
+func (b *Buffer) LoadPrometheusFile(filePath string) (*PrometheusEntry, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.readBufferFile(filePath)
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Extract server_id from filename
+	// Format: YYYYMMDD-HHMMSS-<server_id>.prom
+	filename := filepath.Base(filePath)
+	parts := strings.Split(strings.TrimSuffix(filename, ".prom"), "-")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid filename format: %s", filename)
+	}
+
+	// Server ID is everything after the second dash
+	serverID := strings.Join(parts[2:], "-")
+
+	return &PrometheusEntry{
+		ServerID: serverID,
+		Data:     data,
+	}, nil
 }
 
 // DeleteFile deletes a specific buffer file
@@ -83,33 +104,16 @@ func (b *Buffer) DeleteFile(filePath string) error {
 	return os.Remove(filePath)
 }
 
-// readBufferFile reads a single report from a JSON buffer file
-func (b *Buffer) readBufferFile(filePath string) ([]*metrics.Report, error) {
-	// Read entire file
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	// Parse JSON
-	var report metrics.Report
-	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	// Return as slice for consistency with API
-	return []*metrics.Report{&report}, nil
-}
-
 // getBufferFiles returns all buffer files sorted by name (chronological order)
 func (b *Buffer) getBufferFiles() ([]string, error) {
-	pattern := filepath.Join(b.config.Buffer.Path, "*.json")
+	// Get Prometheus buffer files (.prom)
+	pattern := filepath.Join(b.config.Buffer.Path, "*.prom")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, err
 	}
 
-	// Sort files by name (chronological due to format YYYY-MM-DD-HH-MM-SS-nanos)
+	// Sort files by name (chronological due to format YYYYMMDD-HHMMSS)
 	sort.Strings(files)
 
 	return files, nil
@@ -129,14 +133,22 @@ func (b *Buffer) Cleanup() error {
 
 	for _, filePath := range files {
 		// Extract timestamp from filename
-		// Format: YYYYMMDD-HHMMSS.json (e.g., 20251020-143045.json)
+		// Format: YYYYMMDD-HHMMSS-<server_id>.prom
 		filename := filepath.Base(filePath)
 
-		// Remove .json extension
-		if !strings.HasSuffix(filename, ".json") {
+		// Remove .prom extension
+		if !strings.HasSuffix(filename, ".prom") {
 			continue
 		}
-		timeStr := strings.TrimSuffix(filename, ".json")
+
+		// Extract timestamp part (first two segments before first dash)
+		parts := strings.SplitN(strings.TrimSuffix(filename, ".prom"), "-", 3)
+		if len(parts) < 2 {
+			logger.Debug("Invalid buffer file format, skipping", logger.String("file", filename))
+			continue
+		}
+
+		timeStr := parts[0] + "-" + parts[1]
 
 		// Parse timestamp from filename
 		fileTime, err := time.Parse("20060102-150405", timeStr)

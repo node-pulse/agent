@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/logger"
 	"github.com/node-pulse/agent/internal/updater"
@@ -66,17 +65,14 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	updated, err := u.CheckAndUpdate()
 	if err != nil {
 		// Print user-friendly error
-		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-		fmt.Fprintln(os.Stderr, errorStyle.Render("Update failed: ")+err.Error())
+		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
 		return err
 	}
 
 	if updated {
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Bold(true)
-		fmt.Println(successStyle.Render("✓ Agent updated successfully"))
+		fmt.Println("✓ Agent updated successfully")
 	} else {
-		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#3B82F6"))
-		fmt.Println(infoStyle.Render("Agent is already up to date"))
+		fmt.Println("Agent is already up to date")
 		fmt.Printf("Current version: %s\n", updater.CurrentVersion)
 	}
 

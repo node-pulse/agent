@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/node-pulse/agent/internal/installer"
 	"github.com/spf13/cobra"
 )
@@ -188,18 +187,18 @@ func runQuickMode(existing *installer.ExistingInstall) error {
 }
 
 func runInteractive() error {
-	// Run TUI wizard - it handles all checks internally
-	p := tea.NewProgram(
-		newSetupTUIModel(),
-		tea.WithAltScreen(),
-	)
-
-	if _, err := p.Run(); err != nil {
-		fmt.Println("TUI error:")
-		return err
-	}
-
-	return nil
+	// Interactive mode removed in v2.0
+	// Users should use quick mode with --yes flag and provide configuration flags
+	fmt.Println("❌ Interactive TUI mode has been removed in Node Pulse Agent v2.0")
+	fmt.Println()
+	fmt.Println("Please use quick mode instead:")
+	fmt.Println("  pulse setup --yes --endpoint-url <url> --server-id <uuid>")
+	fmt.Println()
+	fmt.Println("Example:")
+	fmt.Println("  pulse setup --yes --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id 550e8400-e29b-41d4-a716-446655440000")
+	fmt.Println()
+	fmt.Println("Or manually create /etc/node-pulse/nodepulse.yml")
+	return fmt.Errorf("interactive mode not available")
 }
 
 func performInstallation(opts installer.ConfigOptions) error {
@@ -258,8 +257,7 @@ func performInstallation(opts installer.ConfigOptions) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Start the agent:    pulse start")
-	fmt.Println("  2. Watch live metrics: pulse watch")
-	fmt.Println("  3. Install service:    sudo pulse service install")
+	fmt.Println("  2. Install service:    sudo pulse service install")
 	fmt.Println()
 
 	// Ask about service installation
