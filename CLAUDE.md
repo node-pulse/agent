@@ -55,19 +55,18 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
 
 - **cmd/root.go**: Base command that all subcommands attach to
 - **cmd/start.go**: Start command with three modes:
-  - Foreground mode (`pulse start`): Runs in terminal, blocks execution
-  - Daemon mode (`pulse start -d`): Spawns background process using `exec.Command` with `Setsid: true`
+  - Foreground mode (`nodepulse start`): Runs in terminal, blocks execution
+  - Daemon mode (`nodepulse start -d`): Spawns background process using `exec.Command` with `Setsid: true`
   - Both modes create PID file EXCEPT when running under systemd (detected via `INVOCATION_ID` env var)
   - **Current**: Scrapes Prometheus instead of collecting custom metrics
 - **cmd/stop.go**: Stops daemon mode only (reads PID file, sends SIGTERM → SIGKILL if needed)
   - Will NOT stop systemd-managed processes (they don't create PID files)
   - Provides helpful message if systemd service is running
 - **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
-- **cmd/setup.go**: Setup wizard for first-time configuration (command: `pulse setup`)
+- **cmd/setup.go**: Setup wizard for first-time configuration (command: `nodepulse setup`)
   - **Current**: Interactive TUI mode removed, only quick mode (`--yes`) available
   - Prompts for: endpoint URL and server_id
 - **cmd/status.go**: Shows comprehensive agent status including server ID, config, service status, buffer state, and logs
-- **cmd/update.go**: Self-update command that checks for new versions and performs updates
 
 ### Prometheus Scraping (internal/prometheus/)
 The agent scrapes Prometheus exporters instead of collecting custom metrics:
@@ -108,13 +107,13 @@ Uses [Viper](https://github.com/spf13/viper) for config loading from YAML:
   - Default endpoint: `/metrics/prometheus`
 - **serverid.go**: Server ID generation and persistence
   - Auto-generates UUID if not set in config
-  - Persists to `/var/lib/node-pulse/server_id`
+  - Persists to `/var/lib/nodepulse/server_id`
   - Validates format: alphanumeric + dashes, must start/end with alphanumeric
 
 Config search paths (in order):
 1. Explicit `--config` flag
-2. `/etc/node-pulse/nodepulse.yml`
-3. `$HOME/.node-pulse/nodepulse.yml`
+2. `/etc/nodepulse/nodepulse.yml`
+3. `$HOME/.nodepulse/nodepulse.yml`
 4. `./nodepulse.yml`
 
 ### Logger (internal/logger/)
@@ -124,21 +123,18 @@ Structured logging with [Zap](https://github.com/uber-go/zap):
 - File rotation with [Lumberjack](https://github.com/natefinch/lumberjack)
 - Configurable log level, size limits, and retention
 
-### Updater (internal/updater/)
-Self-update system for the agent:
+### Update Management
+**Agent updates are managed centrally via Ansible**, not by the agent itself:
 
-- **updater.go**: Core updater logic
-  - Checks version API endpoint for new releases
-  - Downloads new binary with SHA256 checksum verification
-  - Atomically replaces `/usr/local/bin/pulse`
-  - Restarts agent service via systemd
-  - Includes automatic rollback on failure
-- **Version endpoint**: `GET /agent/version?version={current}&os={os}&arch={arch}`
+- Updates deployed through dashboard's Ansible deployment system
+- Version controlled with rollback capability
+- Staged rollouts across server fleet
+- No self-update mechanism in the agent (removed in v0.1.x)
 
 ### PID File Management (internal/pidfile/)
 Handles process tracking and prevents duplicate agent runs:
 
-- **Location**: `/var/run/pulse.pid` (root) or `~/.node-pulse/pulse.pid` (user)
+- **Location**: `/var/run/nodepulse.pid` (root) or `~/.nodepulse/nodepulse.pid` (user)
 - **Stale PID detection**: `CheckRunning()` automatically detects and cleans stale PID files
 - **Systemd detection**: Checks for `INVOCATION_ID` environment variable (no PID file created under systemd)
 
@@ -176,8 +172,9 @@ The agent runs as a **long-running daemon**:
 - **Dependencies**: `node_exporter` must be installed and running
 - **Security**: Port 9100 must be blocked from external access (UFW/iptables)
 - **Permissions**:
-  - Regular user can run `pulse start`, `pulse start -d`, `pulse stop`
-  - Root required for `pulse service`, `pulse setup`, and `pulse update` commands
+  - Regular user can run `nodepulse start`, `nodepulse start -d`, `nodepulse stop`
+  - Root required for `nodepulse service` and `nodepulse setup` commands
+- **Deployment**: Managed via Ansible from central dashboard (not manual installation)
 
 ## Testing Notes
 
@@ -207,7 +204,7 @@ To test the full flow locally:
 
 4. Verify buffering by pointing endpoint to invalid URL and checking buffer directory:
    ```bash
-   ls -la /var/lib/node-pulse/buffer/
+   ls -la /var/lib/nodepulse/buffer/
    ```
 
 ## Release Process

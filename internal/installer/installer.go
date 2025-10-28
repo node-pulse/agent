@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	DefaultConfigPath      = "/etc/node-pulse/nodepulse.yml"
-	DefaultServerIDPath    = "/var/lib/node-pulse/server_id"
-	DefaultBufferPath      = "/var/lib/node-pulse/buffer"
-	DefaultConfigDir       = "/etc/node-pulse"
-	DefaultStateDir        = "/var/lib/node-pulse"
+	DefaultConfigPath      = "/etc/nodepulse/nodepulse.yml"
+	DefaultServerIDPath    = "/var/lib/nodepulse/server_id"
+	DefaultBufferPath      = "/var/lib/nodepulse/buffer"
+	DefaultConfigDir       = "/etc/nodepulse"
+	DefaultStateDir        = "/var/lib/nodepulse"
 )
 
 // InstallConfig holds the configuration for installation
@@ -215,7 +215,7 @@ func DefaultConfigOptions() ConfigOptions {
 		// Logging defaults
 		LogLevel:      "info",
 		LogOutput:     "stdout",
-		LogFilePath:   "/var/log/node-pulse/agent.log",
+		LogFilePath:   "/var/log/nodepulse/agent.log",
 		LogMaxSizeMB:  10,
 		LogMaxBackups: 3,
 		LogMaxAgeDays: 7,

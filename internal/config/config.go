@@ -63,7 +63,7 @@ var (
 			Timeout:  3 * time.Second,
 		},
 		Buffer: BufferConfig{
-			Path:           "/var/lib/node-pulse/buffer",
+			Path:           "/var/lib/nodepulse/buffer",
 			RetentionHours: 48,
 			BatchSize:      5,
 		},
@@ -71,7 +71,7 @@ var (
 			Level:  "info",
 			Output: "stdout",
 			File: logger.FileConfig{
-				Path:       "/var/log/node-pulse/agent.log",
+				Path:       "/var/log/nodepulse/agent.log",
 				MaxSizeMB:  10,
 				MaxBackups: 3,
 				MaxAgeDays: 7,
@@ -95,8 +95,8 @@ func Load(configPath string) (*Config, error) {
 		// Search for config in standard locations
 		v.SetConfigName("nodepulse")
 		v.SetConfigType("yaml")
-		v.AddConfigPath("/etc/node-pulse/")
-		v.AddConfigPath("$HOME/.node-pulse/")
+		v.AddConfigPath("/etc/nodepulse/")
+		v.AddConfigPath("$HOME/.nodepulse/")
 		v.AddConfigPath(".")
 	}
 
@@ -273,8 +273,8 @@ func ConfigExists(configPath string) bool {
 
 	// Check standard locations
 	locations := []string{
-		"/etc/node-pulse/nodepulse.yml",
-		filepath.Join(os.Getenv("HOME"), ".node-pulse", "nodepulse.yml"),
+		"/etc/nodepulse/nodepulse.yml",
+		filepath.Join(os.Getenv("HOME"), ".nodepulse", "nodepulse.yml"),
 		"nodepulse.yml",
 	}
 
