@@ -16,7 +16,7 @@ A lightweight Prometheus forwarder written in Go. It scrapes metrics from `node_
 - ✅ **Simpler**: No custom metrics collection
 - ✅ **Standard**: Uses Prometheus text format
 - ✅ **Buffered**: Write-Ahead Log pattern for reliability
-- ❌ **No TUI**: `pulse watch` command removed
+- ❌ **No TUI**: `nodepulse watch` command removed
 - ❌ **No JSON**: Prometheus text format only
 
 **Why Prometheus?**
@@ -92,16 +92,16 @@ Download the latest release for your architecture:
 
 ```bash
 # For amd64
-wget https://github.com/node-pulse/agent/releases/latest/download/pulse-linux-amd64.tar.gz
-tar -xzf pulse-linux-amd64.tar.gz
-sudo mv pulse /usr/local/bin/
-sudo chmod +x /usr/local/bin/pulse
+wget https://github.com/node-pulse/agent/releases/latest/download/nodepulse-linux-amd64.tar.gz
+tar -xzf nodepulse-linux-amd64.tar.gz
+sudo mv nodepulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/nodepulse
 
 # For arm64
-wget https://github.com/node-pulse/agent/releases/latest/download/pulse-linux-arm64.tar.gz
-tar -xzf pulse-linux-arm64.tar.gz
-sudo mv pulse /usr/local/bin/
-sudo chmod +x /usr/local/bin/pulse
+wget https://github.com/node-pulse/agent/releases/latest/download/nodepulse-linux-arm64.tar.gz
+tar -xzf nodepulse-linux-arm64.tar.gz
+sudo mv nodepulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/nodepulse
 ```
 
 ### From Source
@@ -109,9 +109,9 @@ sudo chmod +x /usr/local/bin/pulse
 ```bash
 git clone https://github.com/node-pulse/agent.git
 cd agent
-go build -o pulse
-sudo mv pulse /usr/local/bin/
-sudo chmod +x /usr/local/bin/pulse
+go build -o nodepulse
+sudo mv nodepulse /usr/local/bin/
+sudo chmod +x /usr/local/bin/nodepulse
 ```
 
 ## Usage
@@ -119,12 +119,12 @@ sudo chmod +x /usr/local/bin/pulse
 ### Initialize Configuration (First Time Setup)
 
 ```bash
-sudo pulse setup --yes --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id <your-uuid>
+sudo nodepulse setup --yes --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id <your-uuid>
 ```
 
 Quick setup wizard that:
 
-- Creates necessary directories (`/etc/node-pulse`, `/var/lib/node-pulse`)
+- Creates necessary directories (`/etc/nodepulse`, `/var/lib/nodepulse`)
 - Creates configuration file with your settings
 - Uses provided server ID (assigned by dashboard when adding server)
 
@@ -135,7 +135,13 @@ Quick setup wizard that:
 #### Foreground Mode (Development/Testing)
 
 ```bash
-pulse start
+nodepulse start
+```
+
+Or run without subcommand (equivalent):
+
+```bash
+nodepulse --config /etc/nodepulse/nodepulse.yml
 ```
 
 Runs the agent in the foreground (blocks the terminal). Best for development and testing.
@@ -146,16 +152,16 @@ Runs the agent in the foreground (blocks the terminal). Best for development and
 #### Daemon Mode (Background - Development Only)
 
 ```bash
-pulse start -d
+nodepulse start -d
 ```
 
 Runs the agent in the background for quick testing. **Not recommended for production.**
 - Detaches from terminal and runs in background
 - Creates PID file for process management
-- Stop with: `pulse stop`
+- Stop with: `nodepulse stop`
 
 ```bash
-pulse stop
+nodepulse stop
 ```
 
 Stops the background daemon agent:
@@ -169,22 +175,22 @@ Stops the background daemon agent:
 For production deployments, use systemd service management:
 
 ```bash
-sudo pulse service install
-sudo pulse service start
+sudo nodepulse service install
+sudo nodepulse service start
 ```
 
 Benefits:
 - Automatic restart on failure
 - Starts on system boot
 - Managed by systemd (no PID file needed)
-- Stop with: `sudo pulse service stop`
+- Stop with: `sudo nodepulse service stop`
 
-**Important**: `pulse stop` will not stop systemd-managed agents. Use `pulse service stop` instead.
+**Important**: `nodepulse stop` will not stop systemd-managed agents. Use `nodepulse service stop` instead.
 
 ### Check Agent Status
 
 ```bash
-pulse status
+nodepulse status
 ```
 
 Shows comprehensive agent status including server ID, configuration, service status, buffer state, and logging.
@@ -196,17 +202,17 @@ Node Pulse Agent Status
 =====================
 
 Server ID:     a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Persisted at:  /var/lib/node-pulse/server_id
+Persisted at:  /var/lib/nodepulse/server_id
 
-Config File:   /etc/node-pulse/nodepulse.yml
+Config File:   /etc/nodepulse/nodepulse.yml
 Endpoint:      https://dashboard.nodepulse.io/metrics/prometheus
 Interval:      15s
 
 Agent:         running (via systemd)
 
-Buffer:        3 report(s) pending in /var/lib/node-pulse/buffer
+Buffer:        3 report(s) pending in /var/lib/nodepulse/buffer
 
-Log File:      /var/log/node-pulse/agent.log
+Log File:      /var/log/nodepulse/agent.log
 ```
 
 ### Service Management
@@ -214,42 +220,42 @@ Log File:      /var/log/node-pulse/agent.log
 #### Install as systemd service
 
 ```bash
-sudo pulse service install
+sudo nodepulse service install
 ```
 
 #### Start the service
 
 ```bash
-sudo pulse service start
+sudo nodepulse service start
 ```
 
 #### Check service status
 
 ```bash
-sudo pulse service status
+sudo nodepulse service status
 ```
 
 #### Stop the service
 
 ```bash
-sudo pulse service stop
+sudo nodepulse service stop
 ```
 
 #### Restart the service
 
 ```bash
-sudo pulse service restart
+sudo nodepulse service restart
 ```
 
 #### Uninstall the service
 
 ```bash
-sudo pulse service uninstall
+sudo nodepulse service uninstall
 ```
 
 ## Configuration
 
-Configuration file at `/etc/node-pulse/nodepulse.yml`:
+Configuration file at `/etc/nodepulse/nodepulse.yml`:
 
 ```yaml
 server:
@@ -266,7 +272,7 @@ prometheus:
   timeout: 3s
 
 buffer:
-  path: "/var/lib/node-pulse/buffer"
+  path: "/var/lib/nodepulse/buffer"
   retention_hours: 48
   batch_size: 5
 
@@ -274,7 +280,7 @@ logging:
   level: "info"  # Options: debug, info, warn, error
   output: "stdout"  # Options: stdout, file, both
   file:
-    path: "/var/log/node-pulse/agent.log"
+    path: "/var/log/nodepulse/agent.log"
     max_size_mb: 10
     max_backups: 3
     max_age_days: 7
@@ -327,8 +333,8 @@ The server ID uniquely identifies your server in the NodePulse system:
 
 - **Dashboard Assignment**: When you add a server in the dashboard, it assigns a UUID
 - **Ansible Deployment**: Pass the UUID as `server_id` variable
-- **Persistence**: The agent stores the ID in `/var/lib/node-pulse/server_id`
-- **Fallback Locations**: `/etc/node-pulse/server_id`, `~/.node-pulse/server_id`, `./server_id`
+- **Persistence**: The agent stores the ID in `/var/lib/nodepulse/server_id`
+- **Fallback Locations**: `/etc/nodepulse/server_id`, `~/.nodepulse/server_id`, `./server_id`
 
 ## Metrics Collected
 
@@ -388,7 +394,7 @@ When HTTP forwarding fails (timeout or error):
 
 1. **Metrics are saved to buffer first** (before sending)
 2. **Background goroutine drains buffer continuously** with random jitter
-3. **Format**: `/var/lib/node-pulse/buffer/YYYYMMDD-HHMMSS-<server_id>.prom`
+3. **Format**: `/var/lib/nodepulse/buffer/YYYYMMDD-HHMMSS-<server_id>.prom`
 4. **Batch processing**: Sends up to 5 reports per request (configurable)
 5. **Oldest first**: Processes files in chronological order
 6. **Cleanup**: Files older than 48 hours are automatically deleted
@@ -431,7 +437,7 @@ make release
 make build
 
 # Or using go directly
-go build -o build/pulse .
+go build -o build/nodepulse .
 
 # For Linux amd64
 make build-linux-amd64
@@ -446,8 +452,8 @@ make build-linux-arm64
 - **Architectures**: amd64, arm64
 - **Dependencies**: `node_exporter` running on `localhost:9100`
 - **Permissions**:
-  - Normal user for `pulse start`, `pulse start -d`, `pulse stop`
-  - Root (sudo) for `pulse service` commands and `pulse setup`
+  - Normal user for `nodepulse start`, `nodepulse start -d`, `nodepulse stop`
+  - Root (sudo) for `nodepulse service` commands and `nodepulse setup`
 
 ## Data Retention
 
@@ -473,39 +479,39 @@ make build-linux-arm64
    - New buffer format stores Prometheus text format (`.prom` files)
 
 3. **Commands removed:**
-   - `pulse watch` no longer exists (TUI removed)
+   - `nodepulse watch` no longer exists (TUI removed)
 
 ### Migration Steps
 
 1. **Install node_exporter** (see Prerequisites above)
 2. **Stop old agent:**
    ```bash
-   sudo pulse service stop
-   sudo pulse service uninstall
+   sudo nodepulse service stop
+   sudo nodepulse service uninstall
    ```
 3. **Update agent binary:**
    ```bash
-   sudo pulse update
+   sudo nodepulse update
    # Or manually download v2.0
    ```
 4. **Update config file:**
    ```bash
-   sudo nano /etc/node-pulse/nodepulse.yml
+   sudo nano /etc/nodepulse/nodepulse.yml
    # Add prometheus section, change interval to 15s
    ```
 5. **Clear old buffer** (optional):
    ```bash
-   sudo rm -rf /var/lib/node-pulse/buffer/*
+   sudo rm -rf /var/lib/nodepulse/buffer/*
    ```
 6. **Reinstall service:**
    ```bash
-   sudo pulse service install
-   sudo pulse service start
+   sudo nodepulse service install
+   sudo nodepulse service start
    ```
 7. **Verify:**
    ```bash
-   sudo pulse status
-   sudo journalctl -u node-pulse -f
+   sudo nodepulse status
+   sudo journalctl -u nodepulse -f
    ```
 
 ## Development
@@ -555,7 +561,7 @@ go run . start
 
 # Or build and run
 make build
-./build/pulse start
+./build/nodepulse start
 ```
 
 ## License

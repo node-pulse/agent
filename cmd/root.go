@@ -12,10 +12,16 @@ var (
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
-	Use:   "pulse",
-	Short: "NodePulse Agent - Monitor Linux server metrics",
-	Long: `NodePulse Agent monitors Linux server health metrics including CPU,
-memory, network I/O, and uptime, reporting them to a central server.`,
+	Use:   "nodepulse",
+	Short: "NodePulse Agent - Prometheus forwarder for server metrics",
+	Long: `NodePulse Agent scrapes Prometheus metrics from node_exporter and forwards them to a central dashboard.
+
+When called without a subcommand, it runs in foreground mode (equivalent to 'nodepulse start').`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If no subcommand provided, default to 'start' command
+		// This allows systemd to call: /opt/nodepulse/nodepulse --config /path
+		return runAgent(cmd, args)
+	},
 }
 
 // Execute runs the root command
@@ -28,5 +34,5 @@ func Execute() {
 
 func init() {
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: /etc/node-pulse/nodepulse.yml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: /etc/nodepulse/nodepulse.yml)")
 }

@@ -1,7 +1,7 @@
 .PHONY: build clean test install dev release fmt lint deps help push
 
 # Binary name
-BINARY_NAME=pulse
+BINARY_NAME=nodepulse
 BUILD_DIR=build
 
 # Build the binary
