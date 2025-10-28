@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NodePulse Agent v2.0 is a lightweight Prometheus forwarder written in Go that scrapes metrics from `node_exporter` and forwards them to a central dashboard via HTTP. The agent is designed to be minimal (<15 MB binary, <40 MB RAM) and efficient, with smart buffering for offline resilience using a Write-Ahead Log (WAL) pattern.
+NodePulse Agent is a lightweight Prometheus forwarder written in Go that scrapes metrics from `node_exporter` and forwards them to a central dashboard via HTTP. The agent is designed to be minimal (<15 MB binary, <40 MB RAM) and efficient, with smart buffering for offline resilience using a Write-Ahead Log (WAL) pattern.
 
 ## Build & Development Commands
 
@@ -58,13 +58,13 @@ The agent uses [Cobra](https://github.com/spf13/cobra) for CLI command handling:
   - Foreground mode (`pulse start`): Runs in terminal, blocks execution
   - Daemon mode (`pulse start -d`): Spawns background process using `exec.Command` with `Setsid: true`
   - Both modes create PID file EXCEPT when running under systemd (detected via `INVOCATION_ID` env var)
-  - **v2.0**: Scrapes Prometheus instead of collecting custom metrics
+  - **Current**: Scrapes Prometheus instead of collecting custom metrics
 - **cmd/stop.go**: Stops daemon mode only (reads PID file, sends SIGTERM → SIGKILL if needed)
   - Will NOT stop systemd-managed processes (they don't create PID files)
   - Provides helpful message if systemd service is running
 - **cmd/service.go**: systemd service management (install/start/stop/restart/status/uninstall)
 - **cmd/setup.go**: Setup wizard for first-time configuration (command: `pulse setup`)
-  - **v2.0**: Interactive TUI mode removed, only quick mode (`--yes`) available
+  - **Current**: Interactive TUI mode removed, only quick mode (`--yes`) available
   - Prompts for: endpoint URL and server_id
 - **cmd/status.go**: Shows comprehensive agent status including server ID, config, service status, buffer state, and logs
 - **cmd/update.go**: Self-update command that checks for new versions and performs updates
@@ -102,7 +102,7 @@ Write-Ahead Log (WAL) pattern with HTTP forwarding + file-based buffering:
 Uses [Viper](https://github.com/spf13/viper) for config loading from YAML:
 
 - **config.go**: Main config loading, validation, and defaults
-  - **v2.0**: Added `PrometheusConfig` section
+  - **Current**: Added `PrometheusConfig` section
   - Default interval changed to 15s (Prometheus standard)
   - Allowed intervals: 15s, 30s, 1m (removed 5s, 10s)
   - Default endpoint: `/metrics/prometheus`
@@ -169,18 +169,6 @@ The agent runs as a **long-running daemon**:
 
 **Key Design Point**: The agent scrapes Prometheus exporters and forwards the text format. It does NOT parse or interpret the metrics - it's a simple forwarder.
 
-## Removed in v2.0
-
-### TUI Dashboard (cmd/watch.go) - REMOVED
-- ❌ No longer exists
-- ❌ All Bubble Tea and Lipgloss dependencies removed
-- Users should use the dashboard for visualization
-
-### Custom Metrics Collection (internal/metrics/) - REMOVED
-- ❌ No longer collects custom metrics
-- ❌ All custom collectors deleted (cpu.go, memory.go, network.go, disk.go, uptime.go, etc.)
-- ✅ Replaced with Prometheus scraping (100+ metrics from node_exporter)
-
 ## Important Platform Constraints
 
 - **Linux-only**: Requires `node_exporter` running on `localhost:9100`
@@ -238,21 +226,3 @@ This project uses [GoReleaser](https://goreleaser.com/) for multi-architecture b
 - Config validation happens after loading, before agent starts
 - Server ID is validated to ensure alphanumeric start/end, can contain dashes in middle
 - All logging uses structured fields (zap)
-
-## v2.0 Migration Notes
-
-### Breaking Changes
-1. **Configuration**: New `prometheus` section required
-2. **Endpoint**: Changed from `/metrics` to `/metrics/prometheus`
-3. **Interval**: Default changed to 15s (was 5s), allowed: 15s, 30s, 1m
-4. **Buffer format**: `.prom` files instead of `.json`
-5. **TUI removed**: `pulse watch` command no longer exists
-6. **Dependencies**: Requires `node_exporter` to be installed
-
-### New Dependencies
-- None (removed TUI dependencies: bubbletea, lipgloss, bubbles)
-
-### File Changes
-- **Created**: `internal/prometheus/scraper.go`, `internal/prometheus/scraper_test.go`
-- **Modified**: All `internal/report/*.go`, `internal/config/config.go`, `cmd/start.go`, `cmd/setup.go`, `cmd/update.go`
-- **Deleted**: `cmd/watch.go`, `cmd/themes/`, `cmd/common.go`, `cmd/setup_tui.go`, all `internal/metrics/*.go`

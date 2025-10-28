@@ -1,4 +1,4 @@
-# NodePulse Agent v2.0
+# NodePulse Agent
 
 A lightweight Prometheus forwarder written in Go. It scrapes metrics from `node_exporter` and forwards them to your NodePulse dashboard via HTTP.
 
@@ -7,24 +7,6 @@ A lightweight Prometheus forwarder written in Go. It scrapes metrics from `node_
 - Single binary, <15 MB
 - <40 MB RAM usage
 - Standard 15-second scrape interval
-
-## What's New in v2.0
-
-**Major Architecture Change:**
-
-- ✅ **Prometheus-based**: Scrapes `node_exporter` (100+ metrics)
-- ✅ **Simpler**: No custom metrics collection
-- ✅ **Standard**: Uses Prometheus text format
-- ✅ **Buffered**: Write-Ahead Log pattern for reliability
-- ❌ **No TUI**: `nodepulse watch` command removed
-- ❌ **No JSON**: Prometheus text format only
-
-**Why Prometheus?**
-
-- Industry standard for metrics collection
-- Rich ecosystem of exporters
-- 100+ system metrics out of the box
-- Battle-tested reliability
 
 ## Features
 
@@ -119,13 +101,13 @@ sudo chmod +x /usr/local/bin/nodepulse
 ### Initialize Configuration (First Time Setup)
 
 ```bash
-sudo nodepulse setup --yes --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id <your-uuid>
+sudo nodepulse setup --endpoint-url https://dashboard.nodepulse.io/metrics/prometheus --server-id <your-uuid>
 ```
 
-Quick setup wizard that:
+Setup command:
 
-- Creates necessary directories (`/etc/nodepulse`, `/var/lib/nodepulse`)
-- Creates configuration file with your settings
+- Creates necessary directories (`/etc/nodepulse`, `/var/lib/nodepulse`, `/var/log/nodepulse`)
+- Generates configuration file with hardcoded defaults
 - Uses provided server ID (assigned by dashboard when adding server)
 
 **Server ID**: When you add a server in the dashboard, it will provide a UUID. Pass this as `--server-id`.
@@ -463,56 +445,6 @@ make build-linux-arm64
 - After 7 days: automatic deletion (drop old partitions)
 - Storage estimate: ~3 TB for 1000 servers
 - Industry standard for self-hosted monitoring
-
-## Migration from v1.x
-
-### Breaking Changes
-
-1. **Configuration file changes:**
-   - New `prometheus` section required
-   - `server.endpoint` changes from `/metrics` to `/metrics/prometheus`
-   - Default interval changes from 5s to 15s
-   - Allowed intervals: `15s`, `30s`, `1m` (removed 5s, 10s)
-
-2. **Buffered data:**
-   - Old JSON buffer files will be ignored (data loss <48 hours)
-   - New buffer format stores Prometheus text format (`.prom` files)
-
-3. **Commands removed:**
-   - `nodepulse watch` no longer exists (TUI removed)
-
-### Migration Steps
-
-1. **Install node_exporter** (see Prerequisites above)
-2. **Stop old agent:**
-   ```bash
-   sudo nodepulse service stop
-   sudo nodepulse service uninstall
-   ```
-3. **Update agent binary:**
-   ```bash
-   sudo nodepulse update
-   # Or manually download v2.0
-   ```
-4. **Update config file:**
-   ```bash
-   sudo nano /etc/nodepulse/nodepulse.yml
-   # Add prometheus section, change interval to 15s
-   ```
-5. **Clear old buffer** (optional):
-   ```bash
-   sudo rm -rf /var/lib/nodepulse/buffer/*
-   ```
-6. **Reinstall service:**
-   ```bash
-   sudo nodepulse service install
-   sudo nodepulse service start
-   ```
-7. **Verify:**
-   ```bash
-   sudo nodepulse status
-   sudo journalctl -u nodepulse -f
-   ```
 
 ## Development
 

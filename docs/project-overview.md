@@ -1,4 +1,4 @@
-# NodePulse Agent v2.0 - Project Overview
+# NodePulse Agent - Project Overview
 
 ## Project Information
 
@@ -248,7 +248,7 @@ node_memory_MemTotal_bytes 8.589934592e+09
 
 **No parsing or interpretation** - agent is a simple forwarder.
 
-## v2.0 Changes
+## Changes from v0.0.x
 
 ### What's New
 - ✅ Prometheus-based architecture

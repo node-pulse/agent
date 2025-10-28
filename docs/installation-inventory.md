@@ -1,4 +1,4 @@
-# NodePulse Agent v2.0 - Installation Inventory
+# NodePulse Agent - Installation Inventory
 
 This document lists everything that gets installed on a server when deploying the NodePulse agent via Ansible.
 
@@ -55,7 +55,7 @@ These files are created when the agent runs:
 | `/var/log/nodepulse/agent.log` | Active log file |
 | `/var/log/nodepulse/agent.log.*.gz` | Rotated compressed logs |
 
-## What's NOT Installed (v2.0 Changes)
+## What's NOT Installed (Changes from v0.0.x)
 
 ### Removed from v1.x:
 - ❌ No auto-updater timer (`node-pulse-updater.timer`)
@@ -63,9 +63,9 @@ These files are created when the agent runs:
 - ❌ No PID files in `/tmp/` or `/var/run/` (systemd manages the process)
 - ❌ No binary in `/usr/local/bin/pulse` (moved to `/opt/nodepulse/nodepulse`)
 
-### Comparison with v1.x:
+### Comparison with v0.0.x:
 
-| Item | v1.x | v2.0 |
+| Item | v0.0.x | v0.1.0 |
 |------|------|------|
 | Binary location | `/usr/local/bin/pulse` | `/opt/nodepulse/nodepulse` |
 | Config directory | `/etc/node-pulse/` | `/etc/nodepulse/` |
