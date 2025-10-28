@@ -83,7 +83,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 // getServiceStatus checks if the systemd service is running
 func getServiceStatus() string {
 	// Try to check systemd status
-	cmd := exec.Command("systemctl", "is-active", "node-pulse")
+	cmd := exec.Command("systemctl", "is-active", "nodepulse")
 	output, err := cmd.Output()
 
 	if err == nil && string(output) == "active\n" {
@@ -91,7 +91,7 @@ func getServiceStatus() string {
 	}
 
 	// Check if service exists but is not active
-	cmd = exec.Command("systemctl", "is-enabled", "node-pulse")
+	cmd = exec.Command("systemctl", "is-enabled", "nodepulse")
 	_, err = cmd.Output()
 
 	if err == nil {
@@ -101,9 +101,9 @@ func getServiceStatus() string {
 	return "not installed as systemd service"
 }
 
-// countBufferFiles counts the number of .jsonl files in the buffer directory
+// countBufferFiles counts the number of .prom files in the buffer directory
 func countBufferFiles(bufferPath string) (int, error) {
-	pattern := filepath.Join(bufferPath, "*.jsonl")
+	pattern := filepath.Join(bufferPath, "*.prom")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return 0, err

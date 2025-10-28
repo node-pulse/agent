@@ -65,7 +65,7 @@ logging:
   level: "info" # debug, info, warn, error
   output: "both" # stdout, file, both
   file:
-    path: "/var/log/node-pulse/agent.log"
+    path: "/var/log/nodepulse/agent.log"
     max_size_mb: 10
     max_backups: 3
     max_age_days: 7
@@ -286,7 +286,7 @@ logging:
   level: "info"
   output: "both"
   file:
-    path: "/var/log/node-pulse/agent.log"
+    path: "/var/log/nodepulse/agent.log"
     max_size_mb: 10
     max_backups: 5
     max_age_days: 7

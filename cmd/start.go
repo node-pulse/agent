@@ -178,8 +178,8 @@ func runInBackground() error {
 	// Print warning
 	fmt.Println("WARNING: Running in daemon mode (-d) is for development and debugging only.")
 	fmt.Println("For production use, install as a systemd service:")
-	fmt.Println("  pulse service install")
-	fmt.Println("  pulse service start")
+	fmt.Println("  nodepulse service install")
+	fmt.Println("  nodepulse service start")
 	fmt.Println()
 
 	// Build command arguments without the daemon flag

@@ -12,20 +12,19 @@ server:
 agent:
   # Unique server ID (UUID format)
   # If not set or left as placeholder, a UUID will be auto-generated on first run
-  # and saved to /var/lib/node-pulse/server_id for persistence
+  # and saved to /var/lib/nodepulse/server_id for persistence
   # You can also manually set one: uuidgen (Linux/Mac) or New-Guid (PowerShell)
   server_id: "00000000-0000-0000-0000-000000000000"
 
-  # Metrics collection interval
-  # Allowed values: 5s, 10s, 30s, 1m
-  interval: 5s
+  # Metrics collection interval (Prometheus scraping)
+  interval: 15s
 
 buffer:
   # Directory to store buffered reports
   # All metrics are buffered first (Write-Ahead Log pattern)
-  # Each collection creates one JSON file (e.g., 20251020-143045.json)
+  # Each scrape creates one .prom file with Prometheus text format
   # Background process sends buffered data with random jitter to distribute load
-  path: "/var/lib/node-pulse/buffer"
+  path: "/var/lib/nodepulse/buffer"
 
   # How long to keep buffered reports (in hours)
   # Files older than this are automatically deleted
@@ -53,7 +52,7 @@ logging:
   # File logging configuration (used when output is "file" or "both")
   file:
     # Path to the log file
-    path: "/var/log/node-pulse/agent.log"
+    path: "/var/log/nodepulse/agent.log"
 
     # Maximum size in MB before rotating
     max_size_mb: 10

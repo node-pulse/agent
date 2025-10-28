@@ -36,7 +36,7 @@ func stopAgent(cmd *cobra.Command, args []string) error {
 			fmt.Println("No daemon agent is running.")
 			fmt.Println("However, the systemd service appears to be active.")
 			fmt.Println("To stop the systemd service, use:")
-			fmt.Println("  sudo pulse service stop")
+			fmt.Println("  sudo nodepulse service stop")
 			return nil
 		}
 		fmt.Println("No agent is running")
@@ -87,8 +87,8 @@ func stopAgent(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// isSystemdServiceActive checks if the node-pulse systemd service is active
+// isSystemdServiceActive checks if the nodepulse systemd service is active
 func isSystemdServiceActive() bool {
-	cmd := exec.Command("systemctl", "is-active", "--quiet", "node-pulse")
+	cmd := exec.Command("systemctl", "is-active", "--quiet", "nodepulse")
 	return cmd.Run() == nil
 }

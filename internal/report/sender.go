@@ -91,7 +91,7 @@ func (s *Sender) sendPrometheusHTTP(data []byte, serverID string) error {
 	}
 
 	req.Header.Set("Content-Type", "text/plain; version=0.0.4")
-	req.Header.Set("User-Agent", "node-pulse-agent/2.0")
+	req.Header.Set("User-Agent", "nodepulse-agent/2.0")
 
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -142,9 +142,9 @@ YYYYMMDD-HHMMSS-<server_id>.prom
 
 **Examples:**
 ```
-/var/lib/node-pulse/buffer/20251027-140000-550e8400-e29b-41d4-a716-446655440000.prom
-/var/lib/node-pulse/buffer/20251027-140015-550e8400-e29b-41d4-a716-446655440000.prom
-/var/lib/node-pulse/buffer/20251027-140030-550e8400-e29b-41d4-a716-446655440000.prom
+/var/lib/nodepulse/buffer/20251027-140000-550e8400-e29b-41d4-a716-446655440000.prom
+/var/lib/nodepulse/buffer/20251027-140015-550e8400-e29b-41d4-a716-446655440000.prom
+/var/lib/nodepulse/buffer/20251027-140030-550e8400-e29b-41d4-a716-446655440000.prom
 ```
 
 **Content:**
@@ -165,13 +165,13 @@ node_memory_MemTotal_bytes 8.589934592e+09
 
 ```yaml
 buffer:
-  path: "/var/lib/node-pulse/buffer"
+  path: "/var/lib/nodepulse/buffer"
   retention_hours: 48
   batch_size: 5
 ```
 
 **Settings:**
-- `path`: Buffer directory location (default: `/var/lib/node-pulse/buffer`)
+- `path`: Buffer directory location (default: `/var/lib/nodepulse/buffer`)
 - `retention_hours`: Auto-delete files older than this (default: 48 hours)
 - `batch_size`: Maximum files to process per batch (default: 5)
 
@@ -278,17 +278,17 @@ Node Pulse Agent Status
 =====================
 
 Server ID:     550e8400-e29b-41d4-a716-446655440000
-Config File:   /etc/node-pulse/nodepulse.yml
+Config File:   /etc/nodepulse/nodepulse.yml
 Endpoint:      https://dashboard.nodepulse.io/metrics/prometheus
 Interval:      15s
 
 Agent:         running (via systemd)
 
-Buffer:        12 report(s) pending in /var/lib/node-pulse/buffer
+Buffer:        12 report(s) pending in /var/lib/nodepulse/buffer
                Oldest: 2025-10-27 14:00:00
                Total size: 156 KB
 
-Log File:      /var/log/node-pulse/agent.log
+Log File:      /var/log/nodepulse/agent.log
 ```
 
 **Buffer metrics:**
@@ -328,7 +328,7 @@ Log File:      /var/log/node-pulse/agent.log
 **Default settings (recommended for most deployments):**
 ```yaml
 buffer:
-  path: "/var/lib/node-pulse/buffer"
+  path: "/var/lib/nodepulse/buffer"
   retention_hours: 48
   batch_size: 5
 ```

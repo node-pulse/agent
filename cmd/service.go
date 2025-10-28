@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	serviceName     = "node-pulse"
-	serviceFile     = "/etc/systemd/system/node-pulse.service"
-	binaryPath      = "/usr/local/bin/pulse"
+	serviceName     = "nodepulse"
+	serviceFile     = "/etc/systemd/system/nodepulse.service"
+	binaryPath      = "/opt/nodepulse/nodepulse"
 	serviceTemplate = `[Unit]
 Description=NodePulse Server Monitor Agent
 After=network.target
@@ -100,7 +100,7 @@ func installService(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	// Copy binary to /usr/local/bin/pulse if not already there
+	// Copy binary to installation directory if not already there
 	if exePath != binaryPath {
 		if err := copyFile(exePath, binaryPath); err != nil {
 			return fmt.Errorf("failed to copy binary: %w", err)
@@ -130,7 +130,7 @@ func installService(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Service installed and enabled successfully!")
 	fmt.Println("\nTo start the service, run:")
-	fmt.Printf("  sudo pulse service start\n")
+	fmt.Printf("  sudo nodepulse service start\n")
 	return nil
 }
 

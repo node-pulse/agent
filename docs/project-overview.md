@@ -3,10 +3,11 @@
 ## Project Information
 
 - **Repository**: `github.com/node-pulse/agent`
-- **CLI Command**: `pulse`
+- **CLI Command**: `nodepulse`
 - **Language**: Go
 - **Framework**: Cobra (CLI)
 - **Target**: Linux servers (arm64 + amd64)
+- **Deployment**: Ansible-based (centrally managed from dashboard)
 
 ## Purpose
 
@@ -24,8 +25,7 @@ agent/
 │   ├── stop.go           # Stop command (stops daemon mode only)
 │   ├── setup.go          # Setup wizard (quick mode only)
 │   ├── status.go         # Status command (shows server ID, config, service, buffer)
-│   ├── service.go        # Service management (systemd)
-│   └── update.go         # Self-updater
+│   └── service.go        # Service management (systemd)
 ├── internal/
 │   ├── prometheus/       # Prometheus scraper
 │   │   ├── scraper.go    # HTTP scraper for node_exporter
@@ -39,8 +39,7 @@ agent/
 │   │   └── serverid.go   # Server ID persistence
 │   ├── logger/           # Structured logging (zap)
 │   ├── pidfile/          # PID file management
-│   ├── installer/        # Setup installer logic
-│   └── updater/          # Self-update system
+│   └── installer/        # Setup installer logic
 ├── docs/                 # Documentation
 ├── .goreleaser.yaml      # Cross-compilation config
 ├── nodepulse.yml         # Example config file
@@ -86,27 +85,27 @@ Each agent instance requires a unique `server_id` to identify which server is re
 
 **Source:**
 - Assigned by dashboard when adding server
-- Passed to agent via Ansible deployment or `pulse setup --yes`
+- Passed to agent via Ansible deployment or `nodepulse setup --yes`
 
 **Persistence locations** (tried in order):
 
-- `/var/lib/node-pulse/server_id` ✅ (survives re-setup, not OS reinstall)
-- `/etc/node-pulse/server_id`
-- `~/.node-pulse/server_id`
+- `/var/lib/nodepulse/server_id` ✅ (survives re-setup, not OS reinstall)
+- `/etc/nodepulse/server_id`
+- `~/.nodepulse/server_id`
 - `./server_id` (fallback)
 
 **Stability:**
 
-- UUID persists across agent updates
+- UUID persists across agent updates (Ansible manages updates)
 - UUID is regenerated only after OS reinstall (when persistent file is wiped)
-- Check current UUID: `pulse status`
+- Check current UUID: `nodepulse status`
 
 ### Buffer Strategy (Write-Ahead Log Pattern)
 
 **Always save to buffer first, then drain in background:**
 
 ```
-/var/lib/node-pulse/buffer/
+/var/lib/nodepulse/buffer/
 ├── 20251027-140000-550e8400-e29b-41d4-a716-446655440000.prom
 ├── 20251027-140015-550e8400-e29b-41d4-a716-446655440000.prom
 └── 20251027-140030-550e8400-e29b-41d4-a716-446655440000.prom
@@ -125,7 +124,7 @@ Each agent instance requires a unique `server_id` to identify which server is re
 
 ## Configuration File
 
-**Location**: `/etc/node-pulse/nodepulse.yml`
+**Location**: `/etc/nodepulse/nodepulse.yml`
 
 ```yaml
 server:
@@ -142,7 +141,7 @@ prometheus:
   timeout: 3s
 
 buffer:
-  path: "/var/lib/node-pulse/buffer"
+  path: "/var/lib/nodepulse/buffer"
   retention_hours: 48
   batch_size: 5
 
@@ -150,7 +149,7 @@ logging:
   level: "info"
   output: "stdout"
   file:
-    path: "/var/log/node-pulse/agent.log"
+    path: "/var/log/nodepulse/agent.log"
     max_size_mb: 10
     max_backups: 3
     max_age_days: 7
@@ -170,45 +169,45 @@ All other settings use hardcoded defaults.
 ### Core Commands
 
 ```bash
-pulse setup --yes            # Quick setup (prompts for endpoint and server_id)
-pulse start                  # Run agent in foreground (for testing/development)
-pulse start -d               # Run agent in background daemon mode (development only)
-pulse stop                   # Stop daemon mode agent (does not affect systemd service)
-pulse status                 # Display comprehensive status
+nodepulse setup --yes            # Quick setup (prompts for endpoint and server_id)
+nodepulse start                  # Run agent in foreground (for testing/development)
+nodepulse start -d               # Run agent in background daemon mode (development only)
+nodepulse stop                   # Stop daemon mode agent (does not affect systemd service)
+nodepulse status                 # Display comprehensive status
 ```
 
 ### Running Modes
 
-**1. Foreground Mode** (`pulse start`)
+**1. Foreground Mode** (`nodepulse start`)
 - Blocks terminal, runs in foreground
 - Creates PID file to prevent duplicate runs
 - Stop with: Ctrl+C (graceful shutdown with cleanup)
 - Best for: Development and testing
 
-**2. Daemon Mode** (`pulse start -d`)
+**2. Daemon Mode** (`nodepulse start -d`)
 - Runs in background, detached from terminal
 - Creates PID file for process management
-- Stop with: `pulse stop` command
+- Stop with: `nodepulse stop` command
 - Sends SIGTERM (5s grace period) then SIGKILL if needed
 - Best for: Quick testing, not production
 
-**3. Systemd Service** (`pulse service start`)
+**3. Systemd Service** (`nodepulse service start`)
 - Managed by systemd (no PID file)
 - Auto-restart on failure, boot on startup
-- Stop with: `pulse service stop`
-- Best for: Production deployments
+- Stop with: `nodepulse service stop`
+- Best for: Production deployments (managed by Ansible)
 
-**Important**: `pulse stop` only works for daemon mode. If systemd service is running, it provides helpful guidance to use `pulse service stop` instead.
+**Important**: `nodepulse stop` only works for daemon mode. If systemd service is running, it provides helpful guidance to use `nodepulse service stop` instead.
 
 ### Service Management
 
 ```bash
-pulse service install        # Install systemd service
-pulse service start          # Start the service
-pulse service stop           # Stop the service
-pulse service restart        # Restart the service
-pulse service status         # Check detailed systemd service status
-pulse service uninstall      # Remove the service
+nodepulse service install        # Install systemd service
+nodepulse service start          # Start the service
+nodepulse service stop           # Stop the service
+nodepulse service restart        # Restart the service
+nodepulse service status         # Check detailed systemd service status
+nodepulse service uninstall      # Remove the service
 ```
 
 ## Build & Release
@@ -277,5 +276,13 @@ node_memory_MemTotal_bytes 8.589934592e+09
 - ✅ Background drain loop with jitter
 - ✅ Batch processing
 - ✅ Service management
-- ✅ Self-update system
+- ✅ Ansible-based deployment and updates
 - ✅ Documentation complete
+
+### Update Management
+
+Agent updates are **centrally managed via Ansible** from the dashboard:
+- No self-update mechanism in agent
+- Version control with rollback capability
+- Staged rollouts across server fleet
+- Deployment tracking per server

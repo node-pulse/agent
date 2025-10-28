@@ -1,4 +1,6 @@
 # Binaries
+nodepulse
+/nodepulse-*
 pulse
 /pulse-*
 /build/pulse-*
@@ -24,9 +26,11 @@ build/
 
 # Buffer directory (for local testing)
 buffer/
+/var/lib/nodepulse/
 /var/lib/node-pulse/
 
 # Config files (keep template only)
+/etc/nodepulse/
 /etc/node-pulse/
 
 # IDE
