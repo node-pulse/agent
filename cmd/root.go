@@ -8,12 +8,15 @@ import (
 
 var (
 	cfgFile string
+	// Version is set at build time via -ldflags
+	Version = "dev"
 )
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
-	Use:   "nodepulse",
-	Short: "NodePulse Agent - Prometheus forwarder for server metrics",
+	Use:     "nodepulse",
+	Short:   "NodePulse Agent - Prometheus forwarder for server metrics",
+	Version: Version,
 	Long: `NodePulse Agent scrapes Prometheus metrics from node_exporter and forwards them to a central dashboard.
 
 When called without a subcommand, it runs in foreground mode (equivalent to 'nodepulse start').`,
