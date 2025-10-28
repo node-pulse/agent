@@ -10,20 +10,20 @@ import (
 )
 
 const (
-	daemonPidFile = ".node-pulse/pulse.pid"
+	daemonPidFile = ".nodepulse/nodepulse.pid"
 )
 
 // GetPidFilePath returns the PID file path based on user privileges
 func GetPidFilePath() string {
 	if os.Geteuid() == 0 {
 		// Root: use /var/run
-		return "/var/run/pulse.pid"
+		return "/var/run/nodepulse.pid"
 	}
 	// Normal user: use home directory
 	home, err := os.UserHomeDir()
 	if err != nil {
 		// Fallback to current directory
-		return "pulse.pid"
+		return "nodepulse.pid"
 	}
 	return filepath.Join(home, daemonPidFile)
 }

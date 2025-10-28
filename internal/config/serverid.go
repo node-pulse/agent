@@ -52,9 +52,9 @@ func EnsureServerID(cfg *Config) error {
 func GetServerIDPath() string {
 	// Try standard locations
 	locations := []string{
-		"/var/lib/node-pulse/server_id",
-		"/etc/node-pulse/server_id",
-		filepath.Join(os.Getenv("HOME"), ".node-pulse", "server_id"),
+		"/var/lib/nodepulse/server_id",
+		"/etc/nodepulse/server_id",
+		filepath.Join(os.Getenv("HOME"), ".nodepulse", "server_id"),
 		"./server_id", // Fallback to current directory
 	}
 
