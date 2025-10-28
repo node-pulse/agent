@@ -1,0 +1,303 @@
+# PRD: Agent Deployment via Ansible
+
+## Overview
+
+The Node Pulse Agent is deployed automatically via Ansible playbooks. Manual installation and setup is no longer supported in production. This document describes the automated deployment workflow and the minimal `pulse setup` command for development/testing purposes only.
+
+## Deployment Method: Ansible (Production)
+
+### Workflow
+
+```
+Dashboard → Add Server → Generate server_id → Ansible Deployment
+                                                      ↓
+                                    ┌─────────────────────────────┐
+                                    │  Ansible Playbook           │
+                                    │  - Install node_exporter    │
+                                    │  - Block port 9100 (UFW)    │
+                                    │  - Download agent binary    │
+                                    │  - Generate config file     │
+                                    │  - Install systemd service  │
+                                    │  - Start agent              │
+                                    └─────────────────────────────┘
+```
+
+### Configuration Variables (From Dashboard)
+
+Only **TWO** variables are passed from dashboard to Ansible:
+
+1. **`dashboard_endpoint`**: Dashboard URL
+   - Example: `https://dashboard.nodepulse.io`
+   - Used in: `server.endpoint` → `{{ dashboard_endpoint }}/metrics/prometheus`
+
+2. **`server_id`**: UUID assigned by dashboard
+   - Example: `550e8400-e29b-41d4-a716-446655440000`
+   - Generated when server is added to dashboard
+   - Used in: `agent.server_id` → `{{ server_id }}`
+
+All other settings use hardcoded defaults in the Ansible template.
+
+### Ansible Playbook
+
+**File**: `flagship/ansible/playbooks/nodepulse/deploy-agent.yml`
+
+```yaml
+---
+- name: Deploy Node Pulse Agent
+  hosts: all
+  become: yes
+  vars:
+    dashboard_endpoint: "{{ dashboard_endpoint }}"  # From Laravel job
+    server_id: "{{ server_id }}"                    # From dashboard
+
+  roles:
+    - nodepulse-prerequisite    # Install node_exporter, block port 9100
+    - nodepulse-agent           # Download binary, generate config, install service
+```
+
+### Ansible Template
+
+**File**: `flagship/ansible/roles/nodepulse-agent/templates/nodepulse.yml.j2`
+
+```yaml
+# Node Pulse Agent Configuration (v2.0)
+# Deployed by Ansible on {{ ansible_date_time.iso8601 }}
+
+server:
+  endpoint: "{{ dashboard_endpoint }}/metrics/prometheus"
+  timeout: 5s
+
+agent:
+  server_id: "{{ server_id }}"
+  interval: 15s
+
+prometheus:
+  enabled: true
+  endpoint: "http://localhost:9100/metrics"
+  timeout: 3s
+
+buffer:
+  path: "{{ agent_data_dir }}/buffer"
+  retention_hours: 48
+  batch_size: 5
+
+logging:
+  level: "info"
+  output: "stdout"
+  file:
+    path: "{{ agent_log_dir }}/agent.log"
+    max_size_mb: 10
+    max_backups: 3
+    max_age_days: 7
+    compress: true
+```
+
+**Key points:**
+- ✅ Only `dashboard_endpoint` and `server_id` are dynamic
+- ✅ All other values are hardcoded defaults
+- ✅ No more `agent_interval`, `agent_timeout`, `log_level` variables
+- ✅ Simpler, less error-prone deployment
+
+### Ansible Roles
+
+**1. `nodepulse-prerequisite`** (Install dependencies)
+- Install `node_exporter` binary
+- Create systemd service for node_exporter
+- Configure UFW to block port 9100 externally
+- Verify node_exporter is accessible on localhost:9100
+
+**2. `nodepulse-agent`** (Deploy agent)
+- Download agent binary from releases
+- Create directories: `/etc/node-pulse/`, `/var/lib/node-pulse/buffer/`
+- Generate config file from template with `dashboard_endpoint` and `server_id`
+- Persist `server_id` to `/var/lib/node-pulse/server_id`
+- Install systemd service
+- Start agent service
+- Verify agent is running
+
+## Development/Testing: `pulse setup --yes`
+
+For local development and testing only. **NOT for production.**
+
+### Command
+
+```bash
+sudo pulse setup --yes --endpoint-url <url> --server-id <uuid>
+```
+
+### Behavior
+
+- Prompts for two required values:
+  1. **Endpoint URL**: Dashboard URL (e.g., `https://dashboard.nodepulse.io/metrics/prometheus`)
+  2. **Server ID**: UUID (leave empty to auto-generate)
+- Uses defaults for all other settings
+- Creates directories
+- Generates config file
+- Persists server_id
+
+### Interactive TUI Removed
+
+The interactive TUI wizard has been removed in v2.0. Only quick mode (`--yes`) is available.
+
+**Rationale:**
+- Production deployments use Ansible (no manual setup)
+- Development setups prefer command-line flags over TUI
+- Simpler codebase (removed Bubble Tea dependency)
+
+### Example Usage
+
+```bash
+# Development setup with auto-generated UUID
+sudo pulse setup --yes --endpoint-url https://localhost:8080/metrics/prometheus
+
+# Development setup with specific server ID
+sudo pulse setup --yes \
+  --endpoint-url https://localhost:8080/metrics/prometheus \
+  --server-id test-server-01
+```
+
+## Configuration File Structure
+
+### Production (Generated by Ansible)
+
+```yaml
+server:
+  endpoint: "https://dashboard.nodepulse.io/metrics/prometheus"
+  timeout: 5s
+
+agent:
+  server_id: "550e8400-e29b-41d4-a716-446655440000"  # From dashboard
+  interval: 15s
+
+prometheus:
+  enabled: true
+  endpoint: "http://localhost:9100/metrics"
+  timeout: 3s
+
+buffer:
+  path: "/var/lib/node-pulse/buffer"
+  retention_hours: 48
+  batch_size: 5
+
+logging:
+  level: "info"
+  output: "stdout"
+  file:
+    path: "/var/log/node-pulse/agent.log"
+    max_size_mb: 10
+    max_backups: 3
+    max_age_days: 7
+    compress: true
+```
+
+### Development (Generated by `pulse setup --yes`)
+
+Same structure as production, but:
+- Endpoint URL is provided manually
+- Server ID can be auto-generated or custom
+- Useful for local testing
+
+## Validation
+
+Configuration is validated on agent startup:
+
+1. **Server ID format**: Alphanumeric + dashes, must start/end with alphanumeric
+2. **Endpoint URL**: Must be valid HTTP/HTTPS URL
+3. **Interval**: Must be one of: 15s, 30s, 1m
+4. **Prometheus endpoint**: Must be accessible (startup check)
+
+If validation fails, agent exits with error message.
+
+## Idempotency
+
+Ansible playbooks are idempotent - safe to run multiple times:
+
+1. **Config file exists**: Update endpoint only, preserve other settings
+2. **Directories exist**: Skip creation, verify permissions
+3. **Server ID exists**: Always keep existing
+4. **Binary exists**: Skip download if version matches
+
+## Security Considerations
+
+1. **Port 9100 blocked**: Ansible role configures UFW to deny external access
+2. **localhost-only**: node_exporter listens on `127.0.0.1:9100`
+3. **Config permissions**: `/etc/node-pulse/nodepulse.yml` is 0644 (world-readable, root-writable)
+4. **Server ID persistence**: `/var/lib/node-pulse/server_id` is 0600 (root-only)
+5. **Log rotation**: Prevents disk exhaustion
+
+## Migration from v1.x
+
+### Old Method (Manual)
+1. Download binary
+2. Run `pulse setup` (interactive TUI)
+3. Configure manually
+4. Run `pulse service install`
+
+### New Method (Ansible)
+1. Add server in dashboard (generates `server_id`)
+2. Run Ansible playbook with `dashboard_endpoint` and `server_id`
+3. Done - agent is installed, configured, and running
+
+**Benefits:**
+- ✅ Zero manual steps
+- ✅ Consistent configuration across all servers
+- ✅ Automated rollback on failure
+- ✅ Centralized management via dashboard
+
+## Troubleshooting
+
+### Agent fails to start
+
+**Check prerequisites:**
+```bash
+# Verify node_exporter is running
+curl http://localhost:9100/metrics
+
+# Check firewall (should block external, allow localhost)
+sudo ufw status
+
+# Verify agent config
+cat /etc/node-pulse/nodepulse.yml
+
+# Check systemd logs
+sudo journalctl -u node-pulse -f
+```
+
+### Configuration validation fails
+
+**Common errors:**
+- Invalid server_id format (spaces, special chars, starts/ends with dash)
+- Invalid endpoint URL (missing http://)
+- Invalid interval (not 15s, 30s, or 1m)
+- node_exporter not accessible
+
+**Solution:** Re-run Ansible playbook with correct variables.
+
+### Buffer builds up
+
+**Symptoms:** Many `.prom` files in `/var/lib/node-pulse/buffer/`
+
+**Causes:**
+- Dashboard endpoint unreachable
+- Network issues
+- Dashboard service down
+
+**Solution:**
+- Check dashboard is accessible: `curl -I {{ dashboard_endpoint }}`
+- Check agent logs: `sudo journalctl -u node-pulse -f`
+- Verify buffer drain is running: `pulse status`
+
+## Future Enhancements
+
+- **Ansible dynamic inventory**: Automatically discover servers from dashboard
+- **Remote configuration pull**: Agent fetches config from dashboard API
+- **Automated updates**: Dashboard triggers Ansible playbook for agent updates
+- **Health checks**: Dashboard monitors agent connectivity and buffer status
+- **Multi-region deployment**: Deploy agents across different regions/datacenters
+
+## References
+
+- Ansible Playbook: `flagship/ansible/playbooks/nodepulse/deploy-agent.yml`
+- Ansible Roles: `flagship/ansible/roles/nodepulse-*`
+- Agent Documentation: `docs/buffer-mechanism.md`, `README.md`
+- Dashboard Server Management: Laravel Livewire components
