@@ -126,8 +126,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		logger.String("prometheus_endpoint", cfg.Prometheus.Endpoint),
 		logger.String("server_endpoint", cfg.Server.Endpoint))
 
-	// Scrape immediately on start with aligned timestamp
-	collectionTime := time.Now().Truncate(cfg.Agent.Interval)
+	// Scrape immediately on start with aligned timestamp (UTC)
+	collectionTime := time.Now().UTC().Truncate(cfg.Agent.Interval)
 	if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 		logger.Error("Initial scrape failed", logger.Err(err))
 	}
@@ -138,8 +138,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		case <-ctx.Done():
 			return nil
 		case tickTime := <-ticker.C:
-			// Align collection time to interval boundary
-			collectionTime := tickTime.Truncate(cfg.Agent.Interval)
+			// Align collection time to interval boundary (UTC)
+			collectionTime := tickTime.UTC().Truncate(cfg.Agent.Interval)
 			if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 				logger.Error("Scrape failed", logger.Err(err))
 			}
