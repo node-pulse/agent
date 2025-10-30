@@ -3,15 +3,18 @@ package report
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/node-pulse/agent/internal/config"
 	"github.com/node-pulse/agent/internal/logger"
+	"github.com/node-pulse/agent/internal/prometheus"
 )
 
 // Sender handles sending metrics reports to the server
@@ -56,9 +59,9 @@ func NewSender(cfg *config.Config) (*Sender, error) {
 	}, nil
 }
 
-// SendPrometheus saves Prometheus text format data to buffer
-// The data will be sent asynchronously by the drain goroutine
-func (s *Sender) SendPrometheus(data []byte, serverID string) error {
+// BufferPrometheus saves Prometheus text format data to buffer
+// The data will be sent asynchronously by the drain goroutine (after parsing to JSON)
+func (s *Sender) BufferPrometheus(data []byte, serverID string) error {
 	// Always save to buffer first (WAL pattern)
 	if err := s.buffer.SavePrometheus(data, serverID); err != nil {
 		return fmt.Errorf("failed to save prometheus data to buffer: %w", err)
@@ -70,8 +73,8 @@ func (s *Sender) SendPrometheus(data []byte, serverID string) error {
 	return nil
 }
 
-// sendPrometheusHTTP sends Prometheus text format to server
-func (s *Sender) sendPrometheusHTTP(data []byte, serverID string) error {
+// sendJSONHTTP sends JSON metrics to server
+func (s *Sender) sendJSONHTTP(data []byte, serverID string) error {
 	// Build URL with server_id query parameter
 	endpoint := s.config.Server.Endpoint
 	u, err := url.Parse(endpoint)
@@ -90,7 +93,7 @@ func (s *Sender) sendPrometheusHTTP(data []byte, serverID string) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "text/plain; version=0.0.4")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "nodepulse-agent/2.0")
 
 	resp, err := s.client.Do(req)
@@ -161,32 +164,23 @@ func (s *Sender) drainLoop() {
 	}
 }
 
-// processBatch loads and sends buffered Prometheus files
+// processBatch loads and sends buffered files (Prometheus or JSON)
 // Returns error if send fails (files are kept for retry)
 func (s *Sender) processBatch(filePaths []string) error {
 	successCount := 0
 
-	// Process each file individually
+	// Process each file individually (only .prom files expected)
 	for _, filePath := range filePaths {
-		entry, err := s.buffer.LoadPrometheusFile(filePath)
-		if err != nil {
-			// File is corrupted - delete it
-			logger.Warn("Corrupted buffer file detected, deleting",
-				logger.String("file", filePath),
-				logger.Err(err))
-
-			if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
-				logger.Error("Failed to delete corrupted buffer file",
-					logger.String("file", filePath),
-					logger.Err(delErr))
-			}
+		// Only process .prom files
+		if !strings.HasSuffix(filePath, ".prom") {
+			logger.Warn("Unexpected buffer file type, skipping", logger.String("file", filePath))
 			continue
 		}
 
-		// Send Prometheus data
-		if err := s.sendPrometheusHTTP(entry.Data, entry.ServerID); err != nil {
+		err := s.processPrometheusFile(filePath)
+		if err != nil {
 			// Send failed - keep file for retry
-			logger.Debug("Failed to send Prometheus data, will retry",
+			logger.Debug("Failed to send buffered data, will retry",
 				logger.String("file", filePath),
 				logger.Err(err))
 			// Stop processing batch on first failure
@@ -206,7 +200,7 @@ func (s *Sender) processBatch(filePaths []string) error {
 	}
 
 	if successCount > 0 {
-		logger.Info("Successfully sent buffered Prometheus data",
+		logger.Info("Successfully sent buffered data",
 			logger.Int("files", successCount))
 
 		// Periodically clean up old buffer files
@@ -216,6 +210,49 @@ func (s *Sender) processBatch(filePaths []string) error {
 	}
 
 	return nil
+}
+
+// processPrometheusFile loads, parses, and sends a Prometheus buffer file as JSON
+func (s *Sender) processPrometheusFile(filePath string) error {
+	entry, err := s.buffer.LoadPrometheusFile(filePath)
+	if err != nil {
+		// File is corrupted - delete it
+		logger.Warn("Corrupted Prometheus buffer file detected, deleting",
+			logger.String("file", filePath),
+			logger.Err(err))
+
+		if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
+			logger.Error("Failed to delete corrupted buffer file",
+				logger.String("file", filePath),
+				logger.Err(delErr))
+		}
+		return nil // Don't retry corrupted files
+	}
+
+	// Parse Prometheus text to structured metrics
+	snapshot, err := prometheus.ParsePrometheusMetrics(entry.Data)
+	if err != nil {
+		logger.Error("Failed to parse Prometheus metrics from buffer, sending zero values",
+			logger.String("file", filePath),
+			logger.Err(err))
+		// Send zero-value snapshot (only timestamp is set)
+		snapshot = &prometheus.MetricSnapshot{
+			Timestamp: time.Now().UTC(),
+		}
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(snapshot)
+	if err != nil {
+		// This should never happen with a valid struct, but handle it anyway
+		logger.Error("Failed to marshal metrics to JSON (critical error)",
+			logger.String("file", filePath),
+			logger.Err(err))
+		return fmt.Errorf("json marshal failed: %w", err)
+	}
+
+	// Send JSON data
+	return s.sendJSONHTTP(jsonData, entry.ServerID)
 }
 
 // randomDelay waits for a random duration between 0 and the configured interval

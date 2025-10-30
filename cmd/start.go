@@ -128,7 +128,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	// Scrape immediately on start with aligned timestamp (UTC)
 	collectionTime := time.Now().UTC().Truncate(cfg.Agent.Interval)
-	if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
+	if err := scrapeAndBuffer(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 		logger.Error("Initial scrape failed", logger.Err(err))
 	}
 
@@ -140,15 +140,15 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		case tickTime := <-ticker.C:
 			// Align collection time to interval boundary (UTC)
 			collectionTime := tickTime.UTC().Truncate(cfg.Agent.Interval)
-			if err := scrapeAndSendWithTimestamp(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
+			if err := scrapeAndBuffer(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
 				logger.Error("Scrape failed", logger.Err(err))
 			}
 		}
 	}
 }
 
-// scrapeAndSendWithTimestamp scrapes metrics and adds aligned collection timestamp
-func scrapeAndSendWithTimestamp(scraper *prometheus.Scraper, sender *report.Sender, serverID string, collectionTime time.Time) error {
+// scrapeAndBuffer scrapes metrics and saves raw Prometheus text to buffer
+func scrapeAndBuffer(scraper *prometheus.Scraper, sender *report.Sender, serverID string, collectionTime time.Time) error {
 	// Scrape Prometheus exporter
 	data, err := scraper.Scrape()
 	if err != nil {
@@ -159,8 +159,8 @@ func scrapeAndSendWithTimestamp(scraper *prometheus.Scraper, sender *report.Send
 	// This ensures all agents report metrics at the same logical time boundaries
 	dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
 
-	// Save to buffer (WAL pattern - actual sending happens in background)
-	if err := sender.SendPrometheus(dataWithTimestamp, serverID); err != nil {
+	// Save raw Prometheus text to buffer (WAL pattern - parsing happens during drain)
+	if err := sender.BufferPrometheus(dataWithTimestamp, serverID); err != nil {
 		return fmt.Errorf("failed to buffer prometheus data: %w", err)
 	}
 
