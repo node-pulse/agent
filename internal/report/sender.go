@@ -185,7 +185,7 @@ func (s *Sender) processBatch(filePaths []string) error {
 	}
 
 	// Group entries by exporter name
-	exporterMetrics := make(map[string][]prometheus.MetricSnapshot)
+	exporterMetrics := make(map[string][]prometheus.NodeExporterMetricSnapshot)
 	processedFiles := []string{}
 	var serverID string
 
@@ -217,14 +217,15 @@ func (s *Sender) processBatch(filePaths []string) error {
 		}
 
 		// Parse Prometheus text to structured metrics
-		snapshot, err := prometheus.ParsePrometheusMetrics(entry.Data)
+		// Note: Currently only node_exporter is parsed, other exporters need their own parsers
+		snapshot, err := prometheus.ParseNodeExporterMetrics(entry.Data)
 		if err != nil {
-			logger.Warn("Failed to parse Prometheus metrics, using zero values",
+			logger.Warn("Failed to parse node_exporter metrics, using zero values",
 				logger.String("exporter", entry.ExporterName),
 				logger.String("file", filePath),
 				logger.Err(err))
 			// Use zero-value snapshot
-			snapshot = &prometheus.MetricSnapshot{
+			snapshot = &prometheus.NodeExporterMetricSnapshot{
 				Timestamp: time.Now().UTC(),
 			}
 		}

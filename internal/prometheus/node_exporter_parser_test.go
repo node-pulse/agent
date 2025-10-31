@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestParsePrometheusMetrics(t *testing.T) {
+func TestParseNodeExporterMetrics(t *testing.T) {
 	// Read the metrics.txt file from the current directory
 	metricFile := "metrics.txt"
 	data, err := os.ReadFile(metricFile)
@@ -14,9 +14,9 @@ func TestParsePrometheusMetrics(t *testing.T) {
 		t.Fatalf("Failed to read metrics.txt: %v", err)
 	}
 
-	snapshot, err := ParsePrometheusMetrics(data)
+	snapshot, err := ParseNodeExporterMetrics(data)
 	if err != nil {
-		t.Fatalf("ParsePrometheusMetrics failed: %v", err)
+		t.Fatalf("ParseNodeExporterMetrics failed: %v", err)
 	}
 
 	// Verify timestamp is set
@@ -189,7 +189,7 @@ func TestParsePrometheusMetrics(t *testing.T) {
 		t.Log(string(jsonData))
 
 		// Verify JSON can be unmarshaled back
-		var decoded MetricSnapshot
+		var decoded NodeExporterMetricSnapshot
 		if err := json.Unmarshal(jsonData, &decoded); err != nil {
 			t.Fatalf("Failed to unmarshal JSON: %v", err)
 		}
@@ -220,8 +220,8 @@ func TestParsePrometheusMetrics(t *testing.T) {
 	})
 }
 
-func TestParsePrometheusMetrics_EmptyInput(t *testing.T) {
-	snapshot, err := ParsePrometheusMetrics([]byte{})
+func TestParseNodeExporterMetrics_EmptyInput(t *testing.T) {
+	snapshot, err := ParseNodeExporterMetrics([]byte{})
 	if err != nil {
 		t.Fatalf("Should handle empty input: %v", err)
 	}
@@ -236,9 +236,9 @@ func TestParsePrometheusMetrics_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestParsePrometheusMetrics_InvalidInput(t *testing.T) {
+func TestParseNodeExporterMetrics_InvalidInput(t *testing.T) {
 	invalidData := []byte("invalid prometheus format\ngarbage data")
-	snapshot, err := ParsePrometheusMetrics(invalidData)
+	snapshot, err := ParseNodeExporterMetrics(invalidData)
 
 	if err != nil {
 		t.Fatalf("Should handle invalid input gracefully: %v", err)

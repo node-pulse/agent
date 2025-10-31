@@ -9,9 +9,10 @@ import (
 	"time"
 )
 
-// MetricSnapshot represents a parsed snapshot of all essential metrics
+// NodeExporterMetricSnapshot represents a parsed snapshot of node_exporter metrics
 // This matches the admiral.metrics table schema (raw values, no percentages)
-type MetricSnapshot struct {
+// Specifically designed for Prometheus node_exporter metrics only
+type NodeExporterMetricSnapshot struct {
 	Timestamp time.Time `json:"timestamp"`
 
 	// CPU Metrics (seconds, raw values from counters)
@@ -72,10 +73,11 @@ type MetricSnapshot struct {
 	UptimeSeconds int64 `json:"uptime_seconds"`
 }
 
-// ParsePrometheusMetrics parses Prometheus text format and extracts essential metrics
-// Returns a MetricSnapshot with raw counter values (no percentages calculated)
-func ParsePrometheusMetrics(data []byte) (*MetricSnapshot, error) {
-	snapshot := &MetricSnapshot{
+// ParseNodeExporterMetrics parses Prometheus node_exporter text format and extracts essential metrics
+// Returns a NodeExporterMetricSnapshot with raw counter values (no percentages calculated)
+// This parser is specifically designed for node_exporter metrics only
+func ParseNodeExporterMetrics(data []byte) (*NodeExporterMetricSnapshot, error) {
+	snapshot := &NodeExporterMetricSnapshot{
 		Timestamp: time.Now().UTC(),
 	}
 
@@ -155,7 +157,7 @@ type diskMetrics struct {
 	ioTimeSeconds   float64
 }
 
-func parseLine(line string, snapshot *MetricSnapshot,
+func parseLine(line string, snapshot *NodeExporterMetricSnapshot,
 	cpuIdle, cpuUser, cpuSystem, cpuIowait, cpuSteal map[string]float64,
 	networkDevices map[string]*networkMetrics,
 	diskDevices map[string]*diskMetrics) error {
@@ -429,7 +431,7 @@ func isPhysicalNetwork(device string) bool {
 	return true
 }
 
-func selectPrimaryNetwork(snapshot *MetricSnapshot, devices map[string]*networkMetrics) {
+func selectPrimaryNetwork(snapshot *NodeExporterMetricSnapshot, devices map[string]*networkMetrics) {
 	// Priority: eth0 > en0 > first available
 	var primary *networkMetrics
 	if devices["eth0"] != nil {
@@ -456,7 +458,7 @@ func selectPrimaryNetwork(snapshot *MetricSnapshot, devices map[string]*networkM
 	}
 }
 
-func selectPrimaryDisk(snapshot *MetricSnapshot, devices map[string]*diskMetrics) {
+func selectPrimaryDisk(snapshot *NodeExporterMetricSnapshot, devices map[string]*diskMetrics) {
 	// Priority: vda > sda > nvme0n1 > first available
 	var primary *diskMetrics
 	if devices["vda"] != nil {
