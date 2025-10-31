@@ -2,7 +2,6 @@ package exporters
 
 import (
 	"context"
-	"time"
 )
 
 // Exporter defines the interface that all metrics exporters must implement
