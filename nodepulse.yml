@@ -31,6 +31,15 @@ exporters:
     interval: 15s  # Optional: Fast scraping for system metrics (falls back to agent.interval if not specified)
     timeout: 3s
 
+  # Process Exporter - Per-process metrics (CPU, memory by process name)
+  # NOTE: Requires process_exporter to be installed and running
+  # See: ansible/roles/process-exporter/ for deployment
+  - name: process_exporter
+    enabled: false  # Disabled by default - enable after deploying process_exporter
+    endpoint: "http://localhost:9256/metrics"
+    interval: 15s  # Same as node_exporter for consistency
+    timeout: 3s
+
   # Example: PostgreSQL Exporter (uncomment to enable)
   # - name: postgres_exporter
   #   enabled: true

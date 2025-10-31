@@ -17,12 +17,4 @@ type Exporter interface {
 
 	// Verify checks if the exporter is accessible (used at startup)
 	Verify() error
-
-	// DefaultEndpoint returns the standard endpoint for this exporter
-	// Example: "http://localhost:9100/metrics" for node_exporter
-	DefaultEndpoint() string
-
-	// DefaultInterval returns the recommended scrape interval
-	// Example: 15s for node_exporter, 30s for postgres_exporter
-	DefaultInterval() time.Duration
 }

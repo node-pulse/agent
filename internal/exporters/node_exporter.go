@@ -82,11 +82,3 @@ func (n *NodeExporter) Verify() error {
 	logger.Info("node_exporter verified", logger.String("endpoint", n.endpoint))
 	return nil
 }
-
-func (n *NodeExporter) DefaultEndpoint() string {
-	return "http://localhost:9100/metrics"
-}
-
-func (n *NodeExporter) DefaultInterval() time.Duration {
-	return 15 * time.Second
-}

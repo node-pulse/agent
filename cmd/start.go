@@ -103,6 +103,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		switch exporterCfg.Name {
 		case "node_exporter":
 			exp = exporters.NewNodeExporter(exporterCfg.Endpoint, exporterCfg.Timeout)
+		case "process_exporter":
+			exp = exporters.NewProcessExporter(exporterCfg.Endpoint, exporterCfg.Timeout)
 		default:
 			logger.Warn("Unknown exporter type, skipping", logger.String("name", exporterCfg.Name))
 			continue
