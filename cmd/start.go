@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/node-pulse/agent/internal/config"
+	"github.com/node-pulse/agent/internal/exporters"
 	"github.com/node-pulse/agent/internal/logger"
 	"github.com/node-pulse/agent/internal/pidfile"
 	"github.com/node-pulse/agent/internal/prometheus"
@@ -80,16 +81,49 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Create Prometheus scraper
-	scraper := prometheus.NewScraper(&prometheus.ScraperConfig{
-		Endpoint: cfg.Prometheus.Endpoint,
-		Timeout:  cfg.Prometheus.Timeout,
-	})
+	// Create exporter registry
+	registry := exporters.NewRegistry()
 
-	// Verify node_exporter is accessible on startup
-	if err := scraper.Verify(); err != nil {
-		logger.Error("Failed to verify Prometheus exporter - is node_exporter running?", logger.Err(err))
-		return fmt.Errorf("prometheus exporter verification failed: %w\nPlease ensure node_exporter is running on %s", err, cfg.Prometheus.Endpoint)
+	// Register built-in exporters
+	registry.Register(exporters.NewNodeExporter("", 0))
+	// Future: register other exporters here
+	// registry.Register(exporters.NewPostgresExporter("", 0))
+	// registry.Register(exporters.NewMysqlExporter("", 0))
+
+	// Initialize enabled exporters from config
+	activeExporters := []exporters.Exporter{}
+	for _, exporterCfg := range cfg.Exporters {
+		if !exporterCfg.Enabled {
+			continue
+		}
+
+		// Create exporter instance with configured endpoint and timeout
+		var exp exporters.Exporter
+		switch exporterCfg.Name {
+		case "node_exporter":
+			exp = exporters.NewNodeExporter(exporterCfg.Endpoint, exporterCfg.Timeout)
+		default:
+			logger.Warn("Unknown exporter type, skipping", logger.String("name", exporterCfg.Name))
+			continue
+		}
+
+		// Verify exporter is accessible
+		if err := exp.Verify(); err != nil {
+			logger.Warn("Exporter verification failed, skipping",
+				logger.String("name", exporterCfg.Name),
+				logger.String("endpoint", exporterCfg.Endpoint),
+				logger.Err(err))
+			continue
+		}
+
+		activeExporters = append(activeExporters, exp)
+		logger.Info("Exporter initialized",
+			logger.String("name", exporterCfg.Name),
+			logger.String("endpoint", exporterCfg.Endpoint))
+	}
+
+	if len(activeExporters) == 0 {
+		return fmt.Errorf("no active exporters configured - please configure at least one exporter")
 	}
 
 	// Create report sender
@@ -123,14 +157,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	logger.Info("Agent started",
 		logger.String("server_id", cfg.Agent.ServerID),
 		logger.Duration("interval", cfg.Agent.Interval),
-		logger.String("prometheus_endpoint", cfg.Prometheus.Endpoint),
+		logger.Int("exporters", len(activeExporters)),
 		logger.String("server_endpoint", cfg.Server.Endpoint))
 
 	// Scrape immediately on start with aligned timestamp (UTC)
 	collectionTime := time.Now().UTC().Truncate(cfg.Agent.Interval)
-	if err := scrapeAndBuffer(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
-		logger.Error("Initial scrape failed", logger.Err(err))
-	}
+	scrapeAllExporters(ctx, activeExporters, sender, cfg.Agent.ServerID, collectionTime)
 
 	// Continue with ticker
 	for {
@@ -140,34 +172,44 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		case tickTime := <-ticker.C:
 			// Align collection time to interval boundary (UTC)
 			collectionTime := tickTime.UTC().Truncate(cfg.Agent.Interval)
-			if err := scrapeAndBuffer(scraper, sender, cfg.Agent.ServerID, collectionTime); err != nil {
-				logger.Error("Scrape failed", logger.Err(err))
-			}
+			scrapeAllExporters(ctx, activeExporters, sender, cfg.Agent.ServerID, collectionTime)
 		}
 	}
 }
 
-// scrapeAndBuffer scrapes metrics and saves raw Prometheus text to buffer
-func scrapeAndBuffer(scraper *prometheus.Scraper, sender *report.Sender, serverID string, collectionTime time.Time) error {
-	// Scrape Prometheus exporter
-	data, err := scraper.Scrape()
-	if err != nil {
-		return fmt.Errorf("failed to scrape prometheus: %w", err)
+// scrapeAllExporters scrapes all exporters sequentially
+func scrapeAllExporters(ctx context.Context, exportersList []exporters.Exporter,
+	sender *report.Sender, serverID string, collectionTime time.Time) {
+
+	for _, exp := range exportersList {
+		// Scrape with timeout
+		scrapeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		data, err := exp.Scrape(scrapeCtx)
+		cancel()
+
+		if err != nil {
+			logger.Warn("Failed to scrape exporter",
+				logger.String("exporter", exp.Name()),
+				logger.Err(err))
+			continue
+		}
+
+		// Add explicit timestamps to metrics (aligned to collection time)
+		dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
+
+		// Save raw Prometheus text to buffer (WAL pattern)
+		if err := sender.BufferPrometheus(dataWithTimestamp, serverID, exp.Name()); err != nil {
+			logger.Error("Failed to buffer metrics",
+				logger.String("exporter", exp.Name()),
+				logger.Err(err))
+			continue
+		}
+
+		logger.Debug("Exporter scraped and buffered",
+			logger.String("exporter", exp.Name()),
+			logger.Int("bytes", len(dataWithTimestamp)),
+			logger.String("collection_time", collectionTime.Format(time.RFC3339)))
 	}
-
-	// Add explicit timestamps to metrics (aligned to collection time)
-	// This ensures all agents report metrics at the same logical time boundaries
-	dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
-
-	// Save raw Prometheus text to buffer (WAL pattern - parsing happens during drain)
-	if err := sender.BufferPrometheus(dataWithTimestamp, serverID); err != nil {
-		return fmt.Errorf("failed to buffer prometheus data: %w", err)
-	}
-
-	logger.Debug("Prometheus data scraped and buffered",
-		logger.Int("bytes", len(dataWithTimestamp)),
-		logger.String("collection_time", collectionTime.Format(time.RFC3339)))
-	return nil
 }
 
 func runInBackground() error {

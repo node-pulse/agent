@@ -32,15 +32,26 @@ func NewBuffer(cfg *config.Config) (*Buffer, error) {
 }
 
 // SavePrometheus saves Prometheus text format data to buffer
-// Filename format: YYYYMMDD-HHMMSS-<server_id>.prom
-func (b *Buffer) SavePrometheus(data []byte, serverID string) error {
+// Directory structure: buffer/<exporter>/YYYYMMDD-HHMMSS-<server_id>.prom
+func (b *Buffer) SavePrometheus(data []byte, serverID string, exporterName string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Generate unique filename with timestamp
+	// Sanitize exporter name (remove special chars)
+	safeExporterName := sanitizeExporterName(exporterName)
+
+	// Create exporter subdirectory if it doesn't exist
+	exporterDir := filepath.Join(b.config.Buffer.Path, safeExporterName)
+	if err := os.MkdirAll(exporterDir, 0755); err != nil {
+		return fmt.Errorf("failed to create exporter directory: %w", err)
+	}
+
+	// Generate filename without exporter name (it's in the directory)
 	now := time.Now()
-	filename := fmt.Sprintf("%s-%s.prom", now.Format("20060102-150405"), serverID)
-	filePath := filepath.Join(b.config.Buffer.Path, filename)
+	filename := fmt.Sprintf("%s-%s.prom",
+		now.Format("20060102-150405"),
+		serverID)
+	filePath := filepath.Join(exporterDir, filename)
 
 	// Write Prometheus text format to file
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
@@ -48,7 +59,8 @@ func (b *Buffer) SavePrometheus(data []byte, serverID string) error {
 	}
 
 	logger.Debug("Saved Prometheus data to buffer",
-		logger.String("file", filename),
+		logger.String("exporter", exporterName),
+		logger.String("file", filepath.Join(safeExporterName, filename)),
 		logger.Int("bytes", len(data)))
 
 	return nil
@@ -64,8 +76,9 @@ func (b *Buffer) GetBufferFiles() ([]string, error) {
 
 // PrometheusEntry represents a buffered Prometheus scrape
 type PrometheusEntry struct {
-	ServerID string
-	Data     []byte
+	ServerID     string
+	ExporterName string // Extracted from directory name
+	Data         []byte
 }
 
 // LoadPrometheusFile loads Prometheus text format from a buffer file
@@ -79,20 +92,24 @@ func (b *Buffer) LoadPrometheusFile(filePath string) (*PrometheusEntry, error) {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Extract server_id from filename
-	// Format: YYYYMMDD-HHMMSS-<server_id>.prom
+	// Extract metadata from path and filename
+	// Path format: buffer/<exporter>/YYYYMMDD-HHMMSS-<server_id>.prom
+	dir := filepath.Dir(filePath)
+	exporterName := filepath.Base(dir)
+
 	filename := filepath.Base(filePath)
-	parts := strings.Split(strings.TrimSuffix(filename, ".prom"), "-")
+	parts := strings.SplitN(strings.TrimSuffix(filename, ".prom"), "-", 3)
+
 	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid filename format: %s", filename)
+		return nil, fmt.Errorf("invalid filename format: %s (expected: YYYYMMDD-HHMMSS-serverid.prom)", filename)
 	}
 
-	// Server ID is everything after the second dash
-	serverID := strings.Join(parts[2:], "-")
+	serverID := parts[2]
 
 	return &PrometheusEntry{
-		ServerID: serverID,
-		Data:     data,
+		ServerID:     serverID,
+		ExporterName: exporterName,
+		Data:         data,
 	}, nil
 }
 
@@ -105,18 +122,43 @@ func (b *Buffer) DeleteFile(filePath string) error {
 }
 
 // getBufferFiles returns all buffer files sorted by name (chronological order)
+// Scans all exporter subdirectories
 func (b *Buffer) getBufferFiles() ([]string, error) {
-	// Get Prometheus buffer files (.prom)
-	pattern := filepath.Join(b.config.Buffer.Path, "*.prom")
-	files, err := filepath.Glob(pattern)
+	var allFiles []string
+
+	// Read all subdirectories (each is an exporter)
+	exporterDirs, err := os.ReadDir(b.config.Buffer.Path)
 	if err != nil {
+		// If buffer directory doesn't exist yet, return empty list
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
 		return nil, err
 	}
 
-	// Sort files by name (chronological due to format YYYYMMDD-HHMMSS)
-	sort.Strings(files)
+	// Scan each exporter subdirectory for .prom files
+	for _, entry := range exporterDirs {
+		if !entry.IsDir() {
+			continue // Skip non-directory files
+		}
 
-	return files, nil
+		exporterDir := filepath.Join(b.config.Buffer.Path, entry.Name())
+		pattern := filepath.Join(exporterDir, "*.prom")
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			logger.Warn("Failed to list files in exporter directory",
+				logger.String("dir", exporterDir),
+				logger.Err(err))
+			continue
+		}
+
+		allFiles = append(allFiles, files...)
+	}
+
+	// Sort files by full path (chronological due to format YYYYMMDD-HHMMSS)
+	sort.Strings(allFiles)
+
+	return allFiles, nil
 }
 
 // Cleanup removes buffer files older than retention period
@@ -141,7 +183,7 @@ func (b *Buffer) Cleanup() error {
 			continue
 		}
 
-		// Extract timestamp part (first two segments before first dash)
+		// Extract timestamp part (first two segments)
 		parts := strings.SplitN(strings.TrimSuffix(filename, ".prom"), "-", 3)
 		if len(parts) < 2 {
 			logger.Debug("Invalid buffer file format, skipping", logger.String("file", filename))
@@ -168,6 +210,18 @@ func (b *Buffer) Cleanup() error {
 	}
 
 	return nil
+}
+
+// sanitizeExporterName removes special characters from exporter names
+func sanitizeExporterName(name string) string {
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		" ", "_",
+		".", "_",
+	)
+	return replacer.Replace(name)
 }
 
 // Close closes the buffer (currently no-op)

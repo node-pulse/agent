@@ -61,13 +61,14 @@ func NewSender(cfg *config.Config) (*Sender, error) {
 
 // BufferPrometheus saves Prometheus text format data to buffer
 // The data will be sent asynchronously by the drain goroutine (after parsing to JSON)
-func (s *Sender) BufferPrometheus(data []byte, serverID string) error {
+func (s *Sender) BufferPrometheus(data []byte, serverID string, exporterName string) error {
 	// Always save to buffer first (WAL pattern)
-	if err := s.buffer.SavePrometheus(data, serverID); err != nil {
+	if err := s.buffer.SavePrometheus(data, serverID, exporterName); err != nil {
 		return fmt.Errorf("failed to save prometheus data to buffer: %w", err)
 	}
 
 	logger.Debug("Prometheus data saved to buffer",
+		logger.String("exporter", exporterName),
 		logger.String("server_id", serverID),
 		logger.Int("bytes", len(data)))
 	return nil
@@ -164,12 +165,19 @@ func (s *Sender) drainLoop() {
 	}
 }
 
-// processBatch loads and sends buffered files (Prometheus or JSON)
+// processBatch loads and sends buffered files grouped by exporter
 // Returns error if send fails (files are kept for retry)
+// Payload format: { "node_exporter": [...], "postgres_exporter": [...] }
 func (s *Sender) processBatch(filePaths []string) error {
-	successCount := 0
+	if len(filePaths) == 0 {
+		return nil
+	}
 
-	// Process each file individually (only .prom files expected)
+	// Group entries by exporter name
+	exporterMetrics := make(map[string][]prometheus.MetricSnapshot)
+	processedFiles := []string{}
+	var serverID string
+
 	for _, filePath := range filePaths {
 		// Only process .prom files
 		if !strings.HasSuffix(filePath, ".prom") {
@@ -177,31 +185,90 @@ func (s *Sender) processBatch(filePaths []string) error {
 			continue
 		}
 
-		err := s.processPrometheusFile(filePath)
+		// Load file
+		entry, err := s.buffer.LoadPrometheusFile(filePath)
 		if err != nil {
-			// Send failed - keep file for retry
-			logger.Debug("Failed to send buffered data, will retry",
+			// File is corrupted - delete it
+			logger.Warn("Corrupted buffer file detected, deleting",
 				logger.String("file", filePath),
 				logger.Err(err))
-			// Stop processing batch on first failure
-			break
+			if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
+				logger.Error("Failed to delete corrupted buffer file",
+					logger.String("file", filePath),
+					logger.Err(delErr))
+			}
+			continue
 		}
 
-		// Send succeeded - delete file
+		// Store server ID (all files should have same server_id)
+		if serverID == "" {
+			serverID = entry.ServerID
+		}
+
+		// Parse Prometheus text to structured metrics
+		snapshot, err := prometheus.ParsePrometheusMetrics(entry.Data)
+		if err != nil {
+			logger.Warn("Failed to parse Prometheus metrics, using zero values",
+				logger.String("exporter", entry.ExporterName),
+				logger.String("file", filePath),
+				logger.Err(err))
+			// Use zero-value snapshot
+			snapshot = &prometheus.MetricSnapshot{
+				Timestamp: time.Now().UTC(),
+			}
+		}
+
+		// Add to exporter's array
+		exporterMetrics[entry.ExporterName] = append(
+			exporterMetrics[entry.ExporterName],
+			*snapshot,
+		)
+
+		processedFiles = append(processedFiles, filePath)
+	}
+
+	// Nothing to send
+	if len(exporterMetrics) == 0 {
+		return nil
+	}
+
+	// Build payload: { "node_exporter": [...], "mysql_exporter": [...] }
+	payload := make(map[string]interface{})
+	for exporterName, snapshots := range exporterMetrics {
+		payload[exporterName] = snapshots
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch: %w", err)
+	}
+
+	// Send batch via HTTP
+	if err := s.sendJSONHTTP(jsonData, serverID); err != nil {
+		// Send failed - keep all files for retry
+		logger.Debug("Failed to send batch, will retry",
+			logger.Int("batch_size", len(processedFiles)),
+			logger.Err(err))
+		return err
+	}
+
+	// Success - delete all files in batch
+	successCount := 0
+	for _, filePath := range processedFiles {
 		if err := s.buffer.DeleteFile(filePath); err != nil {
 			logger.Error("Failed to delete buffer file after successful send",
 				logger.String("file", filePath),
 				logger.Err(err))
 		} else {
 			successCount++
-			logger.Debug("Successfully sent and deleted buffer file",
-				logger.String("file", filePath))
 		}
 	}
 
 	if successCount > 0 {
 		logger.Info("Successfully sent buffered data",
-			logger.Int("files", successCount))
+			logger.Int("files", successCount),
+			logger.Int("exporters", len(exporterMetrics)))
 
 		// Periodically clean up old buffer files
 		if err := s.buffer.Cleanup(); err != nil {
@@ -210,49 +277,6 @@ func (s *Sender) processBatch(filePaths []string) error {
 	}
 
 	return nil
-}
-
-// processPrometheusFile loads, parses, and sends a Prometheus buffer file as JSON
-func (s *Sender) processPrometheusFile(filePath string) error {
-	entry, err := s.buffer.LoadPrometheusFile(filePath)
-	if err != nil {
-		// File is corrupted - delete it
-		logger.Warn("Corrupted Prometheus buffer file detected, deleting",
-			logger.String("file", filePath),
-			logger.Err(err))
-
-		if delErr := s.buffer.DeleteFile(filePath); delErr != nil {
-			logger.Error("Failed to delete corrupted buffer file",
-				logger.String("file", filePath),
-				logger.Err(delErr))
-		}
-		return nil // Don't retry corrupted files
-	}
-
-	// Parse Prometheus text to structured metrics
-	snapshot, err := prometheus.ParsePrometheusMetrics(entry.Data)
-	if err != nil {
-		logger.Error("Failed to parse Prometheus metrics from buffer, sending zero values",
-			logger.String("file", filePath),
-			logger.Err(err))
-		// Send zero-value snapshot (only timestamp is set)
-		snapshot = &prometheus.MetricSnapshot{
-			Timestamp: time.Now().UTC(),
-		}
-	}
-
-	// Convert to JSON
-	jsonData, err := json.Marshal(snapshot)
-	if err != nil {
-		// This should never happen with a valid struct, but handle it anyway
-		logger.Error("Failed to marshal metrics to JSON (critical error)",
-			logger.String("file", filePath),
-			logger.Err(err))
-		return fmt.Errorf("json marshal failed: %w", err)
-	}
-
-	// Send JSON data
-	return s.sendJSONHTTP(jsonData, entry.ServerID)
 }
 
 // randomDelay waits for a random duration between 0 and the configured interval

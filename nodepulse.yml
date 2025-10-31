@@ -16,13 +16,42 @@ agent:
   # You can also manually set one: uuidgen (Linux/Mac) or New-Guid (PowerShell)
   server_id: "00000000-0000-0000-0000-000000000000"
 
-  # Metrics collection interval (Prometheus scraping)
+  # Default metrics collection interval (used if exporter doesn't specify one)
+  # Valid values: 15s, 30s, 1m
   interval: 15s
+
+# Prometheus Exporters Configuration
+# The agent supports multiple exporters running in parallel
+exporters:
+  # Node Exporter - System metrics (CPU, memory, disk, network)
+  - name: node_exporter
+    enabled: true
+    endpoint: "http://localhost:9100/metrics"
+    timeout: 3s
+
+  # Example: PostgreSQL Exporter (uncomment to enable)
+  # - name: postgres_exporter
+  #   enabled: true
+  #   endpoint: "http://localhost:9187/metrics"
+  #   timeout: 5s
+
+  # Example: MySQL Exporter (uncomment to enable)
+  # - name: mysql_exporter
+  #   enabled: true
+  #   endpoint: "http://localhost:9104/metrics"
+  #   timeout: 5s
+
+  # Example: Redis Exporter (uncomment to enable)
+  # - name: redis_exporter
+  #   enabled: true
+  #   endpoint: "http://localhost:9121/metrics"
+  #   timeout: 3s
 
 buffer:
   # Directory to store buffered reports
   # All metrics are buffered first (Write-Ahead Log pattern)
-  # Each scrape creates one .prom file with Prometheus text format
+  # Structure: buffer/<exporter>/YYYYMMDD-HHMMSS-<server_id>.prom
+  # Each exporter gets its own subdirectory for better organization
   # Background process sends buffered data with random jitter to distribute load
   path: "/var/lib/nodepulse/buffer"
 

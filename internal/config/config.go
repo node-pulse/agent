@@ -15,7 +15,7 @@ import (
 type Config struct {
 	Server     ServerConfig      `mapstructure:"server"`
 	Agent      AgentConfig       `mapstructure:"agent"`
-	Prometheus PrometheusConfig  `mapstructure:"prometheus"`
+	Exporters  []ExporterConfig  `mapstructure:"exporters"`
 	Buffer     BufferConfig      `mapstructure:"buffer"`
 	Logging    logger.Config     `mapstructure:"logging"`
 	ConfigFile string            `mapstructure:"-"` // Path to the config file that was loaded (not from config)
@@ -33,11 +33,13 @@ type AgentConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
 }
 
-// PrometheusConfig represents Prometheus scraping settings
-type PrometheusConfig struct {
-	Enabled  bool          `mapstructure:"enabled"`  // Enable Prometheus scraping (default: true)
+// ExporterConfig configures a single Prometheus exporter
+type ExporterConfig struct {
+	Name     string        `mapstructure:"name"`     // e.g., "node_exporter", "postgres_exporter"
+	Enabled  bool          `mapstructure:"enabled"`  // default: true
 	Endpoint string        `mapstructure:"endpoint"` // e.g., "http://localhost:9100/metrics"
-	Timeout  time.Duration `mapstructure:"timeout"`  // HTTP timeout (default: 3s)
+	Interval string        `mapstructure:"interval"` // e.g., "15s", "30s", "1m" (parsed as time.Duration)
+	Timeout  time.Duration `mapstructure:"timeout"`  // default: 3s
 }
 
 // BufferConfig represents buffer settings
@@ -56,11 +58,6 @@ var (
 		},
 		Agent: AgentConfig{
 			Interval: 15 * time.Second, // Prometheus scraping typically 15s-1m
-		},
-		Prometheus: PrometheusConfig{
-			Enabled:  true,
-			Endpoint: "http://localhost:9100/metrics",
-			Timeout:  3 * time.Second,
 		},
 		Buffer: BufferConfig{
 			Path:           "/var/lib/nodepulse/buffer",
@@ -134,9 +131,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.endpoint", defaultConfig.Server.Endpoint)
 	v.SetDefault("server.timeout", defaultConfig.Server.Timeout)
 	v.SetDefault("agent.interval", defaultConfig.Agent.Interval)
-	v.SetDefault("prometheus.enabled", defaultConfig.Prometheus.Enabled)
-	v.SetDefault("prometheus.endpoint", defaultConfig.Prometheus.Endpoint)
-	v.SetDefault("prometheus.timeout", defaultConfig.Prometheus.Timeout)
 	v.SetDefault("buffer.path", defaultConfig.Buffer.Path)
 	v.SetDefault("buffer.retention_hours", defaultConfig.Buffer.RetentionHours)
 	v.SetDefault("buffer.batch_size", defaultConfig.Buffer.BatchSize)
@@ -190,13 +184,36 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("agent.interval must be one of: 15s, 30s, 1m")
 	}
 
-	// Validate Prometheus config
-	if cfg.Prometheus.Enabled {
-		if cfg.Prometheus.Endpoint == "" {
-			return fmt.Errorf("prometheus.endpoint is required when prometheus.enabled is true")
+	// Validate exporters config
+	if len(cfg.Exporters) == 0 {
+		return fmt.Errorf("no exporters configured - please configure at least one exporter in 'exporters' array")
+	}
+
+	// Validate each exporter
+	for i, e := range cfg.Exporters {
+		if e.Name == "" {
+			return fmt.Errorf("exporters[%d]: name is required", i)
 		}
-		if cfg.Prometheus.Timeout <= 0 {
-			return fmt.Errorf("prometheus.timeout must be positive")
+		if e.Endpoint == "" {
+			return fmt.Errorf("exporters[%d] (%s): endpoint is required", i, e.Name)
+		}
+		if e.Timeout <= 0 {
+			return fmt.Errorf("exporters[%d] (%s): timeout must be positive", i, e.Name)
+		}
+
+		// Validate interval if specified
+		if e.Interval != "" {
+			allowedIntervals := []string{"15s", "30s", "1m"}
+			valid := false
+			for _, allowed := range allowedIntervals {
+				if e.Interval == allowed {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("exporters[%d] (%s): interval must be one of: 15s, 30s, 1m", i, e.Name)
+			}
 		}
 	}
 
