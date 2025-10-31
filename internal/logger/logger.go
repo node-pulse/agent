@@ -12,18 +12,18 @@ import (
 
 // Config holds the logging configuration
 type Config struct {
-	Level  string     `yaml:"level"`
-	Output string     `yaml:"output"`
-	File   FileConfig `yaml:"file"`
+	Level  string     `mapstructure:"level"`
+	Output string     `mapstructure:"output"`
+	File   FileConfig `mapstructure:"file"`
 }
 
 // FileConfig holds file-specific logging configuration
 type FileConfig struct {
-	Path       string `yaml:"path"`
-	MaxSizeMB  int    `yaml:"max_size_mb"`
-	MaxBackups int    `yaml:"max_backups"`
-	MaxAgeDays int    `yaml:"max_age_days"`
-	Compress   bool   `yaml:"compress"`
+	Path       string `mapstructure:"path"`
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`
+	MaxBackups int    `mapstructure:"max_backups"`
+	MaxAgeDays int    `mapstructure:"max_age_days"`
+	Compress   bool   `mapstructure:"compress"`
 }
 
 var (
