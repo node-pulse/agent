@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -149,67 +150,101 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Main scraping loop
-	// Use ticker for interval, but align collection timestamps to interval boundaries
-	ticker := time.NewTicker(cfg.Agent.Interval)
-	defer ticker.Stop()
+	// Launch independent scraper goroutine for each exporter (Phase 2)
+	var wg sync.WaitGroup
 
 	logger.Info("Agent started",
 		logger.String("server_id", cfg.Agent.ServerID),
-		logger.Duration("interval", cfg.Agent.Interval),
 		logger.Int("exporters", len(activeExporters)),
 		logger.String("server_endpoint", cfg.Server.Endpoint))
 
+	for i, exp := range activeExporters {
+		exporterCfg := cfg.Exporters[i]
+		interval := exporterCfg.ParsedInterval
+		timeout := exporterCfg.Timeout
+
+		wg.Add(1)
+		go func(exporter exporters.Exporter, scrapeInterval time.Duration, scrapeTimeout time.Duration) {
+			defer wg.Done()
+			runScraperLoop(ctx, exporter, sender, cfg.Agent.ServerID, scrapeInterval, scrapeTimeout)
+		}(exp, interval, timeout)
+
+		logger.Info("Started scraper loop",
+			logger.String("exporter", exp.Name()),
+			logger.Duration("interval", interval),
+			logger.Duration("timeout", timeout))
+	}
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+
+	// Wait for all scraper goroutines to finish
+	logger.Info("Waiting for all scrapers to stop...")
+	wg.Wait()
+
+	logger.Info("All scrapers stopped, agent shutdown complete")
+	return nil
+}
+
+// runScraperLoop runs an independent scrape loop for a single exporter
+// Each exporter has its own ticker and runs at its configured interval
+func runScraperLoop(ctx context.Context, exporter exporters.Exporter,
+	sender *report.Sender, serverID string, interval time.Duration, timeout time.Duration) {
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	// Scrape immediately on start with aligned timestamp (UTC)
-	collectionTime := time.Now().UTC().Truncate(cfg.Agent.Interval)
-	scrapeAllExporters(ctx, activeExporters, sender, cfg.Agent.ServerID, collectionTime)
+	collectionTime := time.Now().UTC().Truncate(interval)
+	scrapeAndBuffer(ctx, exporter, sender, serverID, collectionTime, timeout)
 
 	// Continue with ticker
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			logger.Info("Scraper loop stopped", logger.String("exporter", exporter.Name()))
+			return
+
 		case tickTime := <-ticker.C:
 			// Align collection time to interval boundary (UTC)
-			collectionTime := tickTime.UTC().Truncate(cfg.Agent.Interval)
-			scrapeAllExporters(ctx, activeExporters, sender, cfg.Agent.ServerID, collectionTime)
+			collectionTime := tickTime.UTC().Truncate(interval)
+			scrapeAndBuffer(ctx, exporter, sender, serverID, collectionTime, timeout)
 		}
 	}
 }
 
-// scrapeAllExporters scrapes all exporters sequentially
-func scrapeAllExporters(ctx context.Context, exportersList []exporters.Exporter,
-	sender *report.Sender, serverID string, collectionTime time.Time) {
+// scrapeAndBuffer performs a single scrape operation for an exporter
+func scrapeAndBuffer(ctx context.Context, exporter exporters.Exporter,
+	sender *report.Sender, serverID string, collectionTime time.Time, timeout time.Duration) {
 
-	for _, exp := range exportersList {
-		// Scrape with timeout
-		scrapeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		data, err := exp.Scrape(scrapeCtx)
-		cancel()
+	// Create timeout context for scrape
+	scrapeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-		if err != nil {
-			logger.Warn("Failed to scrape exporter",
-				logger.String("exporter", exp.Name()),
-				logger.Err(err))
-			continue
-		}
-
-		// Add explicit timestamps to metrics (aligned to collection time)
-		dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
-
-		// Save raw Prometheus text to buffer (WAL pattern)
-		if err := sender.BufferPrometheus(dataWithTimestamp, serverID, exp.Name()); err != nil {
-			logger.Error("Failed to buffer metrics",
-				logger.String("exporter", exp.Name()),
-				logger.Err(err))
-			continue
-		}
-
-		logger.Debug("Exporter scraped and buffered",
-			logger.String("exporter", exp.Name()),
-			logger.Int("bytes", len(dataWithTimestamp)),
-			logger.String("collection_time", collectionTime.Format(time.RFC3339)))
+	// Scrape metrics
+	data, err := exporter.Scrape(scrapeCtx)
+	if err != nil {
+		logger.Warn("Failed to scrape exporter",
+			logger.String("exporter", exporter.Name()),
+			logger.Err(err))
+		return
 	}
+
+	// Add explicit timestamps to metrics (aligned to collection time)
+	dataWithTimestamp := prometheus.AddTimestamps(data, collectionTime)
+
+	// Save raw Prometheus text to buffer (WAL pattern)
+	if err := sender.BufferPrometheus(dataWithTimestamp, serverID, exporter.Name()); err != nil {
+		logger.Error("Failed to buffer metrics",
+			logger.String("exporter", exporter.Name()),
+			logger.Err(err))
+		return
+	}
+
+	logger.Debug("Exporter scraped and buffered",
+		logger.String("exporter", exporter.Name()),
+		logger.Int("bytes", len(dataWithTimestamp)),
+		logger.String("collection_time", collectionTime.Format(time.RFC3339)))
 }
 
 func runInBackground() error {

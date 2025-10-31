@@ -9,6 +9,8 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,7 +124,7 @@ func (s *Sender) StartDraining() {
 }
 
 // drainLoop continuously drains the buffer with random delays
-// Batches up to 5 reports per request for efficiency
+// Uses smart batching to group files by time windows (5s buckets)
 func (s *Sender) drainLoop() {
 	for {
 		// Check if context is cancelled
@@ -147,17 +149,26 @@ func (s *Sender) drainLoop() {
 			continue
 		}
 
-		// Determine batch size: up to configured batch_size
-		batchSize := len(files)
-		if batchSize > s.config.Buffer.BatchSize {
-			batchSize = s.config.Buffer.BatchSize
-		}
+		// Group files by time window (5s buckets) for efficient batching
+		timeWindows := s.groupFilesByTimeWindow(files, 5*time.Second)
 
-		// Process batch of files (oldest first)
-		batch := files[:batchSize]
-		if err := s.processBatch(batch); err != nil {
-			// Failed to send - keep files and retry after delay
-			logger.Debug("Failed to process batch, will retry", logger.Int("batch_size", batchSize), logger.Err(err))
+		// Process first time window (oldest files first)
+		if len(timeWindows) > 0 {
+			firstWindow := timeWindows[0]
+
+			// Limit batch size to configured batch_size
+			batchSize := len(firstWindow)
+			if batchSize > s.config.Buffer.BatchSize {
+				batchSize = s.config.Buffer.BatchSize
+			}
+
+			batch := firstWindow[:batchSize]
+			if err := s.processBatch(batch); err != nil {
+				// Failed to send - keep files and retry after delay
+				logger.Debug("Failed to process batch, will retry",
+					logger.Int("batch_size", batchSize),
+					logger.Err(err))
+			}
 		}
 
 		// Wait random delay before next attempt
@@ -277,6 +288,72 @@ func (s *Sender) processBatch(filePaths []string) error {
 	}
 
 	return nil
+}
+
+// groupFilesByTimeWindow groups files into time buckets (e.g., 5s windows)
+// This allows batching multiple exporters that scraped at similar times
+// Returns a list of time windows (oldest first), each containing file paths
+func (s *Sender) groupFilesByTimeWindow(filePaths []string, windowSize time.Duration) [][]string {
+	// Map: timestamp bucket -> file paths
+	windows := make(map[int64][]string)
+
+	for _, filePath := range filePaths {
+		// Parse timestamp from filename: YYYYMMDD-HHMMSS-...
+		timestamp, err := parseTimestampFromFilename(filePath)
+		if err != nil {
+			logger.Warn("Failed to parse timestamp from filename, skipping",
+				logger.String("file", filePath),
+				logger.Err(err))
+			continue
+		}
+
+		// Bucket by time window (e.g., 5s buckets)
+		bucket := timestamp.Unix() / int64(windowSize.Seconds())
+		windows[bucket] = append(windows[bucket], filePath)
+	}
+
+	// Convert to sorted list of windows (oldest first)
+	buckets := make([]int64, 0, len(windows))
+	for bucket := range windows {
+		buckets = append(buckets, bucket)
+	}
+	sort.Slice(buckets, func(i, j int) bool {
+		return buckets[i] < buckets[j]
+	})
+
+	result := make([][]string, 0, len(buckets))
+	for _, bucket := range buckets {
+		result = append(result, windows[bucket])
+	}
+
+	return result
+}
+
+// parseTimestampFromFilename extracts timestamp from buffer filename
+// Format: buffer/<exporter>/YYYYMMDD-HHMMSS-<server_id>.prom
+func parseTimestampFromFilename(filePath string) (time.Time, error) {
+	filename := filepath.Base(filePath)
+
+	// Remove .prom extension
+	if !strings.HasSuffix(filename, ".prom") {
+		return time.Time{}, fmt.Errorf("invalid file extension")
+	}
+
+	// Extract timestamp part (first two segments: YYYYMMDD-HHMMSS)
+	parts := strings.SplitN(strings.TrimSuffix(filename, ".prom"), "-", 3)
+	if len(parts) < 2 {
+		return time.Time{}, fmt.Errorf("invalid filename format")
+	}
+
+	timeStr := parts[0] + "-" + parts[1]
+
+	// Parse timestamp
+	timestamp, err := time.Parse("20060102-150405", timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse timestamp: %w", err)
+	}
+
+	return timestamp, nil
 }
 
 // randomDelay waits for a random duration between 0 and the configured interval

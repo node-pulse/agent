@@ -29,17 +29,19 @@ type ServerConfig struct {
 
 // AgentConfig represents agent behavior settings
 type AgentConfig struct {
-	ServerID string        `mapstructure:"server_id"`
-	Interval time.Duration `mapstructure:"interval"`
+	ServerID        string        `mapstructure:"server_id"`
+	Interval        time.Duration `mapstructure:"interval"` // Default interval for exporters that don't specify one
+	DefaultInterval time.Duration `mapstructure:"-"`        // Computed field (not from config)
 }
 
 // ExporterConfig configures a single Prometheus exporter
 type ExporterConfig struct {
-	Name     string        `mapstructure:"name"`     // e.g., "node_exporter", "postgres_exporter"
-	Enabled  bool          `mapstructure:"enabled"`  // default: true
-	Endpoint string        `mapstructure:"endpoint"` // e.g., "http://localhost:9100/metrics"
-	Interval string        `mapstructure:"interval"` // e.g., "15s", "30s", "1m" (parsed as time.Duration)
-	Timeout  time.Duration `mapstructure:"timeout"`  // default: 3s
+	Name             string        `mapstructure:"name"`     // e.g., "node_exporter", "postgres_exporter"
+	Enabled          bool          `mapstructure:"enabled"`  // default: true
+	Endpoint         string        `mapstructure:"endpoint"` // e.g., "http://localhost:9100/metrics"
+	Interval         string        `mapstructure:"interval"` // e.g., "15s", "30s", "1m" (optional, falls back to agent.interval)
+	Timeout          time.Duration `mapstructure:"timeout"`  // default: 3s
+	ParsedInterval   time.Duration `mapstructure:"-"`        // Computed field: parsed interval or default
 }
 
 // BufferConfig represents buffer settings
@@ -189,8 +191,10 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("no exporters configured - please configure at least one exporter in 'exporters' array")
 	}
 
-	// Validate each exporter
-	for i, e := range cfg.Exporters {
+	// Validate each exporter and parse intervals
+	for i := range cfg.Exporters {
+		e := &cfg.Exporters[i]
+
 		if e.Name == "" {
 			return fmt.Errorf("exporters[%d]: name is required", i)
 		}
@@ -201,19 +205,36 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("exporters[%d] (%s): timeout must be positive", i, e.Name)
 		}
 
-		// Validate interval if specified
+		// Parse and validate interval if specified
 		if e.Interval != "" {
-			allowedIntervals := []string{"15s", "30s", "1m"}
+			parsed, err := time.ParseDuration(e.Interval)
+			if err != nil {
+				return fmt.Errorf("exporters[%d] (%s): invalid interval format: %w", i, e.Name, err)
+			}
+
+			// Validate allowed intervals
+			allowedIntervals := []time.Duration{
+				15 * time.Second,
+				30 * time.Second,
+				1 * time.Minute,
+				5 * time.Minute,
+			}
+
 			valid := false
 			for _, allowed := range allowedIntervals {
-				if e.Interval == allowed {
+				if parsed == allowed {
 					valid = true
 					break
 				}
 			}
 			if !valid {
-				return fmt.Errorf("exporters[%d] (%s): interval must be one of: 15s, 30s, 1m", i, e.Name)
+				return fmt.Errorf("exporters[%d] (%s): interval must be one of: 15s, 30s, 1m, 5m", i, e.Name)
 			}
+
+			e.ParsedInterval = parsed
+		} else {
+			// Use agent default interval if not specified
+			e.ParsedInterval = cfg.Agent.Interval
 		}
 	}
 

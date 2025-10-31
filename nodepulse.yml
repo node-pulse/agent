@@ -16,43 +16,58 @@ agent:
   # You can also manually set one: uuidgen (Linux/Mac) or New-Guid (PowerShell)
   server_id: "00000000-0000-0000-0000-000000000000"
 
-  # Default metrics collection interval (used if exporter doesn't specify one)
+  # Default metrics collection interval (fallback for exporters without explicit interval)
   # Valid values: 15s, 30s, 1m
+  # Note: Each exporter can override this with its own interval
   interval: 15s
 
 # Prometheus Exporters Configuration
-# The agent supports multiple exporters running in parallel
+# Phase 2: Each exporter runs independently with its own interval (parallel scraping)
 exporters:
   # Node Exporter - System metrics (CPU, memory, disk, network)
   - name: node_exporter
     enabled: true
     endpoint: "http://localhost:9100/metrics"
+    interval: 15s  # Optional: Fast scraping for system metrics (falls back to agent.interval if not specified)
     timeout: 3s
 
   # Example: PostgreSQL Exporter (uncomment to enable)
   # - name: postgres_exporter
   #   enabled: true
   #   endpoint: "http://localhost:9187/metrics"
+  #   interval: 30s  # Slower scraping for database metrics
   #   timeout: 5s
 
   # Example: MySQL Exporter (uncomment to enable)
   # - name: mysql_exporter
   #   enabled: true
   #   endpoint: "http://localhost:9104/metrics"
+  #   interval: 30s  # Slower scraping for database metrics
   #   timeout: 5s
 
   # Example: Redis Exporter (uncomment to enable)
   # - name: redis_exporter
   #   enabled: true
   #   endpoint: "http://localhost:9121/metrics"
+  #   interval: 15s  # Fast scraping for cache metrics
   #   timeout: 3s
+
+  # Example: Custom Application Metrics
+  # - name: custom_app
+  #   enabled: false
+  #   endpoint: "http://localhost:8080/metrics"
+  #   interval: 1m  # Slow scraping for application metrics
+  #   timeout: 5s
 
 buffer:
   # Directory to store buffered reports
   # All metrics are buffered first (Write-Ahead Log pattern)
   # Structure: buffer/<exporter>/YYYYMMDD-HHMMSS-<server_id>.prom
   # Each exporter gets its own subdirectory for better organization
-  # Background process sends buffered data with random jitter to distribute load
+  # Background drain process uses smart batching:
+  #   - Groups files by 5s time windows
+  #   - Batches multiple exporters scraped at similar times
+  #   - Reduces HTTP overhead significantly
   path: "/var/lib/nodepulse/buffer"
 
   # How long to keep buffered reports (in hours)
@@ -60,9 +75,10 @@ buffer:
   retention_hours: 48
 
   # Number of reports to send per batch request
+  # Phase 2: Increased default for better efficiency with multiple exporters
   # Higher values = fewer HTTP requests, larger payloads
-  # Default: 5
-  batch_size: 5
+  # Default: 10 (was 5 in Phase 1)
+  batch_size: 10
 
 logging:
   # Log level: debug, info, warn, error

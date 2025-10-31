@@ -1,9 +1,10 @@
 # Multi-Exporter Architecture Design
 
-**Document Status:** Phase 1 Complete ✅
+**Document Status:** Phase 2 Complete ✅
 **Created:** 2025-10-30
-**Implemented:** 2025-10-30
-**Target Version:** v2.1.0+
+**Phase 1 Implemented:** 2025-10-30
+**Phase 2 Implemented:** 2025-10-30
+**Target Version:** v2.2.0+
 
 ## Executive Summary
 
@@ -38,9 +39,133 @@ Each exporter is a top-level key with an array of metric snapshots. This allows:
 - Easy extensibility (add new exporters without schema changes)
 
 **Phased Approach:**
-- **Phase 1**: Plugin architecture with exporter registry ✅ **COMPLETE**
-- **Phase 2**: Independent scrape loops + smart batching (true scalability, ~5-7 days)
+- **Phase 1**: Plugin architecture with exporter registry ✅ **COMPLETE** (2025-10-30)
+- **Phase 2**: Independent scrape loops + smart batching ✅ **COMPLETE** (2025-10-30)
 - **Phase 3**: Auto-discovery and advanced features (optional, ~3-5 days)
+
+---
+
+## Implementation Status - Phase 2 Complete ✅
+
+**Completed:** 2025-10-30
+
+### What Was Implemented in Phase 2
+
+#### 1. Per-Exporter Intervals
+- ✅ Updated `ExporterConfig` to support optional `interval` field (string)
+- ✅ Added `ParsedInterval` computed field to store parsed time.Duration
+- ✅ `agent.interval` now serves as default for exporters without explicit interval
+- ✅ Validation supports: 15s, 30s, 1m, 5m intervals
+
+#### 2. Independent Scraper Goroutines
+- ✅ Each exporter runs in its own goroutine with independent ticker
+- ✅ Implemented `runScraperLoop()` - per-exporter scrape loop
+- ✅ Implemented `scrapeAndBuffer()` - single scrape operation
+- ✅ Parallel scraping - no blocking between exporters
+- ✅ Graceful shutdown with `sync.WaitGroup`
+
+#### 3. Smart Batching by Time Windows
+- ✅ Implemented `groupFilesByTimeWindow()` - groups files into 5s buckets
+- ✅ Implemented `parseTimestampFromFilename()` - extracts timestamp from filename
+- ✅ Drain loop processes oldest time window first
+- ✅ Multiple exporters scraped at similar times batched into single HTTP request
+
+#### 4. Configuration Changes
+**agent.interval:**
+- Still required (serves as default for exporters)
+- Falls back when exporter doesn't specify interval
+
+**exporters[].interval:**
+- Optional per-exporter interval
+- Validates against allowed values: 15s, 30s, 1m, 5m
+- Falls back to `agent.interval` if not specified
+
+### Example Phase 2 Configuration
+
+```yaml
+server:
+  endpoint: "https://dashboard.nodepulse.io/metrics/prometheus"
+  timeout: 5s
+
+agent:
+  server_id: "550e8400-e29b-41d4-a716-446655440000"
+  interval: 15s  # Default interval for exporters without explicit interval
+
+exporters:
+  - name: node_exporter
+    enabled: true
+    endpoint: "http://localhost:9100/metrics"
+    interval: 15s  # Fast scraping for system metrics
+    timeout: 3s
+
+  - name: postgres_exporter
+    enabled: true
+    endpoint: "http://localhost:9187/metrics"
+    interval: 30s  # Slower scraping for database metrics
+    timeout: 5s
+
+  - name: backup_monitor
+    enabled: true
+    endpoint: "http://localhost:8080/metrics"
+    interval: 5m  # Very slow scraping for backup status
+    timeout: 10s
+
+buffer:
+  path: "/var/lib/nodepulse/buffer"
+  retention_hours: 48
+  batch_size: 10  # Increased for Phase 2 efficiency
+```
+
+### Key Features Delivered
+
+✅ **True Parallelism** - Each exporter runs independently
+✅ **Per-Exporter Intervals** - Different scrape rates (15s, 30s, 1m, 5m)
+✅ **No Blocking** - Slow exporters don't delay fast ones
+✅ **Smart Batching** - Time-window grouping reduces HTTP requests
+✅ **Graceful Shutdown** - WaitGroup ensures clean exit
+✅ **Backward Compatible** - Phase 1 configs work (all use default interval)
+
+### Behavioral Changes from Phase 1
+
+**Phase 1 (Sequential):**
+```
+14:00:00 - Scrape all exporters sequentially (blocking)
+14:00:15 - Scrape all exporters sequentially
+14:00:30 - Scrape all exporters sequentially
+```
+
+**Phase 2 (Independent):**
+```
+14:00:00 - node_exporter scrapes
+14:00:00 - postgres_exporter scrapes
+14:00:00 - backup_monitor scrapes
+14:00:15 - node_exporter scrapes
+14:00:30 - node_exporter scrapes
+14:00:30 - postgres_exporter scrapes (30s interval)
+14:05:00 - backup_monitor scrapes (5m interval)
+```
+
+### Files Modified in Phase 2
+
+1. `internal/config/config.go` - Added per-exporter interval support
+2. `cmd/start.go` - Replaced single loop with independent goroutines
+3. `internal/report/sender.go` - Added time-window batching
+
+### Performance Improvements
+
+**Without Phase 2 (3 exporters at 15s interval):**
+- node_exporter: 0.5s scrape
+- postgres_exporter: 3s scrape (slow database query)
+- backup_monitor: 2s scrape
+- **Total time per cycle: 5.5s** (sequential blocking)
+
+**With Phase 2 (independent intervals):**
+- node_exporter: 15s interval, 0.5s scrape (parallel)
+- postgres_exporter: 30s interval, 3s scrape (parallel)
+- backup_monitor: 5m interval, 2s scrape (parallel)
+- **Max scrape time: 3s** (longest individual scrape, no blocking)
+- **50% fewer postgres scrapes** (30s vs 15s)
+- **95% fewer backup scrapes** (5m vs 15s)
 
 ---
 
@@ -1682,18 +1807,18 @@ Expected output:
 - ⏭️ Write unit tests for exporter interface (TODO)
 - ⏭️ Write integration tests for multi-exporter buffering (TODO)
 
-### Phase 2: Independent Scrape Loops
+### Phase 2: Independent Scrape Loops ✅ COMPLETE
 
-- [ ] Update `cmd/start.go` (launch goroutines per exporter)
-- [ ] Implement `runScraperLoop()` function
-- [ ] Implement `groupFilesByTimeWindow()` in sender
-- [ ] Implement `sendBatchedMetrics()` for batch payloads
-- [ ] Update dashboard API to accept batched metrics
-- [ ] Add per-exporter interval validation
-- [ ] Add WaitGroup for graceful shutdown
-- [ ] Write tests for concurrent scraping
-- [ ] Write tests for time-window batching
-- [ ] Performance testing with 10+ exporters
+- ✅ Update `cmd/start.go` (launch goroutines per exporter)
+- ✅ Implement `runScraperLoop()` function
+- ✅ Implement `groupFilesByTimeWindow()` in sender
+- ✅ Implement `parseTimestampFromFilename()` helper
+- ✅ Dashboard already supports batched metrics (Phase 1 payload format)
+- ✅ Add per-exporter interval validation
+- ✅ Add WaitGroup for graceful shutdown
+- ⏭️ Write tests for concurrent scraping (TODO)
+- ⏭️ Write tests for time-window batching (TODO)
+- ⏭️ Performance testing with 10+ exporters (TODO)
 
 ### Phase 3: Advanced Features (Optional)
 
