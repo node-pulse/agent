@@ -178,14 +178,15 @@ func (s *Sender) drainLoop() {
 
 // processBatch loads and sends buffered files grouped by exporter
 // Returns error if send fails (files are kept for retry)
-// Payload format: { "node_exporter": [...], "postgres_exporter": [...] }
+// Payload format: { "node_exporter": [...], "process_exporter": [...] }
 func (s *Sender) processBatch(filePaths []string) error {
 	if len(filePaths) == 0 {
 		return nil
 	}
 
-	// Group entries by exporter name
-	exporterMetrics := make(map[string][]prometheus.NodeExporterMetricSnapshot)
+	// Group entries by exporter name - use separate maps for type safety
+	nodeExporterMetrics := []prometheus.NodeExporterMetricSnapshot{}
+	processExporterMetrics := []prometheus.ProcessExporterMetricSnapshot{}
 	processedFiles := []string{}
 	var serverID string
 
@@ -216,38 +217,60 @@ func (s *Sender) processBatch(filePaths []string) error {
 			serverID = entry.ServerID
 		}
 
-		// Parse Prometheus text to structured metrics
-		// Note: Currently only node_exporter is parsed, other exporters need their own parsers
-		snapshot, err := prometheus.ParseNodeExporterMetrics(entry.Data)
-		if err != nil {
-			logger.Warn("Failed to parse node_exporter metrics, using zero values",
-				logger.String("exporter", entry.ExporterName),
-				logger.String("file", filePath),
-				logger.Err(err))
-			// Use zero-value snapshot
-			snapshot = &prometheus.NodeExporterMetricSnapshot{
-				Timestamp: time.Now().UTC(),
+		// Parse Prometheus text to structured metrics based on exporter type
+		switch entry.ExporterName {
+		case "node_exporter":
+			snapshot, err := prometheus.ParseNodeExporterMetrics(entry.Data)
+			if err != nil {
+				logger.Warn("Failed to parse node_exporter metrics, using zero values",
+					logger.String("exporter", entry.ExporterName),
+					logger.String("file", filePath),
+					logger.Err(err))
+				// Use zero-value snapshot
+				snapshot = &prometheus.NodeExporterMetricSnapshot{
+					Timestamp: time.Now().UTC(),
+				}
 			}
-		}
+			nodeExporterMetrics = append(nodeExporterMetrics, *snapshot)
 
-		// Add to exporter's array
-		exporterMetrics[entry.ExporterName] = append(
-			exporterMetrics[entry.ExporterName],
-			*snapshot,
-		)
+		case "process_exporter":
+			snapshots, err := prometheus.ParseProcessExporterMetrics(entry.Data)
+			if err != nil {
+				logger.Warn("Failed to parse process_exporter metrics, skipping",
+					logger.String("exporter", entry.ExporterName),
+					logger.String("file", filePath),
+					logger.Err(err))
+				continue
+			}
+			// Append all process snapshots (one per process group)
+			processExporterMetrics = append(processExporterMetrics, snapshots...)
+
+		default:
+			logger.Warn("Unknown exporter type, skipping",
+				logger.String("exporter", entry.ExporterName),
+				logger.String("file", filePath))
+			continue
+		}
 
 		processedFiles = append(processedFiles, filePath)
 	}
 
 	// Nothing to send
-	if len(exporterMetrics) == 0 {
+	if len(nodeExporterMetrics) == 0 && len(processExporterMetrics) == 0 {
 		return nil
 	}
 
-	// Build payload: { "node_exporter": [...], "mysql_exporter": [...] }
+	// Build payload: { "node_exporter": [...], "process_exporter": [...] }
+	// Only include exporters that have data
 	payload := make(map[string]interface{})
-	for exporterName, snapshots := range exporterMetrics {
-		payload[exporterName] = snapshots
+	exporterCount := 0
+	if len(nodeExporterMetrics) > 0 {
+		payload["node_exporter"] = nodeExporterMetrics
+		exporterCount++
+	}
+	if len(processExporterMetrics) > 0 {
+		payload["process_exporter"] = processExporterMetrics
+		exporterCount++
 	}
 
 	// Convert to JSON
@@ -280,7 +303,7 @@ func (s *Sender) processBatch(filePaths []string) error {
 	if successCount > 0 {
 		logger.Info("Successfully sent buffered data",
 			logger.Int("files", successCount),
-			logger.Int("exporters", len(exporterMetrics)))
+			logger.Int("exporters", exporterCount))
 
 		// Periodically clean up old buffer files
 		if err := s.buffer.Cleanup(); err != nil {

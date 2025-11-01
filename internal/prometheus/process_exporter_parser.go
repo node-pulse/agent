@@ -8,38 +8,37 @@ import (
 	"time"
 )
 
-// ProcessExporterMetricSnapshot represents parsed process metrics from process_exporter
-// This captures per-process group metrics (grouped by command name)
+// ProcessExporterMetricSnapshot represents a single process group metric snapshot
+// This is a flat structure matching NodeExporterMetricSnapshot pattern
+// Each process group (e.g., "nginx", "postgres") becomes one snapshot
 type ProcessExporterMetricSnapshot struct {
-	Timestamp time.Time       `json:"timestamp"`
-	Processes []ProcessMetric `json:"processes"`
+	Timestamp       time.Time `json:"timestamp"`
+	Name            string    `json:"name"`              // Process name (groupname from process_exporter)
+	NumProcs        int       `json:"num_procs"`         // Number of processes in this group
+	CPUSecondsTotal float64   `json:"cpu_seconds_total"` // Total CPU time consumed (counter)
+	MemoryBytes     int64     `json:"memory_bytes"`      // Resident memory (RSS) in bytes
 }
 
-// ProcessMetric represents metrics for a single process group (e.g., all "nginx" processes)
-type ProcessMetric struct {
-	Name            string  `json:"name"`              // Process name (groupname from process_exporter)
-	NumProcs        int     `json:"num_procs"`         // Number of processes in this group
-	CPUSecondsTotal float64 `json:"cpu_seconds_total"` // Total CPU time consumed (counter)
-	MemoryBytes     int64   `json:"memory_bytes"`      // Resident memory (RSS) in bytes
+// processData is a temporary struct used during parsing
+type processData struct {
+	numProcs        int
+	cpuSecondsTotal float64
+	memoryBytes     int64
 }
 
 // ParseProcessExporterMetrics parses Prometheus process_exporter text format
-// Extracts per-process group metrics (CPU, memory, count)
+// Returns a slice of ProcessExporterMetricSnapshot (one per process group)
 //
 // Expected metrics from process_exporter:
 // - namedprocess_namegroup_num_procs{groupname="nginx"} 4
 // - namedprocess_namegroup_cpu_seconds_total{groupname="nginx"} 1234.56
 // - namedprocess_namegroup_memory_bytes{groupname="nginx",memtype="resident"} 104857600
-func ParseProcessExporterMetrics(data []byte) (*ProcessExporterMetricSnapshot, error) {
-	snapshot := &ProcessExporterMetricSnapshot{
-		Timestamp: time.Now().UTC(),
-		Processes: []ProcessMetric{},
-	}
-
+func ParseProcessExporterMetrics(data []byte) ([]ProcessExporterMetricSnapshot, error) {
+	timestamp := time.Now().UTC()
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 
 	// Track metrics per process group (groupname)
-	processMetrics := make(map[string]*ProcessMetric)
+	processMetrics := make(map[string]*processData)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -60,18 +59,25 @@ func ParseProcessExporterMetrics(data []byte) (*ProcessExporterMetricSnapshot, e
 		return nil, fmt.Errorf("scanner error: %w", err)
 	}
 
-	// Convert map to slice
-	for _, pm := range processMetrics {
+	// Convert map to slice of flat snapshots
+	snapshots := []ProcessExporterMetricSnapshot{}
+	for name, data := range processMetrics {
 		// Only include processes that have at least 1 running instance
-		if pm.NumProcs > 0 {
-			snapshot.Processes = append(snapshot.Processes, *pm)
+		if data.numProcs > 0 {
+			snapshots = append(snapshots, ProcessExporterMetricSnapshot{
+				Timestamp:       timestamp,
+				Name:            name,
+				NumProcs:        data.numProcs,
+				CPUSecondsTotal: data.cpuSecondsTotal,
+				MemoryBytes:     data.memoryBytes,
+			})
 		}
 	}
 
-	return snapshot, nil
+	return snapshots, nil
 }
 
-func parseProcessLine(line string, processMetrics map[string]*ProcessMetric) error {
+func parseProcessLine(line string, processMetrics map[string]*processData) error {
 	// Split metric name and value
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
@@ -107,9 +113,7 @@ func parseProcessLine(line string, processMetrics map[string]*ProcessMetric) err
 
 	// Ensure process metric entry exists
 	if processMetrics[groupname] == nil {
-		processMetrics[groupname] = &ProcessMetric{
-			Name: groupname,
-		}
+		processMetrics[groupname] = &processData{}
 	}
 
 	pm := processMetrics[groupname]
@@ -117,16 +121,16 @@ func parseProcessLine(line string, processMetrics map[string]*ProcessMetric) err
 	// Parse specific metrics
 	switch metricName {
 	case "namedprocess_namegroup_num_procs":
-		pm.NumProcs = int(value)
+		pm.numProcs = int(value)
 
 	case "namedprocess_namegroup_cpu_seconds_total":
-		pm.CPUSecondsTotal = value
+		pm.cpuSecondsTotal = value
 
 	case "namedprocess_namegroup_memory_bytes":
 		// Only use resident memory (RSS)
 		memtype, ok := labels["memtype"]
 		if ok && memtype == "resident" {
-			pm.MemoryBytes = int64(value)
+			pm.memoryBytes = int64(value)
 		}
 	}
 

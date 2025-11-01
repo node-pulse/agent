@@ -16,6 +16,8 @@ type ProcessExporter struct {
 	client   *http.Client
 }
 
+var _ Exporter = (*ProcessExporter)(nil)
+
 // NewProcessExporter creates a new ProcessExporter instance
 func NewProcessExporter(endpoint string, timeout time.Duration) *ProcessExporter {
 	// Use defaults if not specified
