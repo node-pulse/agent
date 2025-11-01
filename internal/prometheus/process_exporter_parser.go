@@ -124,7 +124,9 @@ func parseProcessLine(line string, processMetrics map[string]*processData) error
 		pm.numProcs = int(value)
 
 	case "namedprocess_namegroup_cpu_seconds_total":
-		pm.cpuSecondsTotal = value
+		// Sum across all modes (user + system)
+		// process_exporter provides: mode="user" and mode="system"
+		pm.cpuSecondsTotal += value
 
 	case "namedprocess_namegroup_memory_bytes":
 		// Only use resident memory (RSS)
