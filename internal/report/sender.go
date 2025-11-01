@@ -148,9 +148,11 @@ func (s *Sender) drainLoop() {
 			continue
 		}
 
-		// NEW APPROACH: Group files by exporter, pick oldest from each
-		// This ensures all exporters are represented in each batch
-		batch := s.selectOldestFromEachExporter(files, s.config.Buffer.BatchSize)
+		// NEW APPROACH: Pick N oldest files from each exporter
+		// This ensures all exporters are represented and drains backlog quickly
+		// With 2 exporters and 5 files each = 10 files per HTTP request
+		filesPerExporter := 5
+		batch := s.selectOldestFromEachExporter(files, filesPerExporter)
 
 		if len(batch) > 0 {
 			if err := s.processBatch(batch); err != nil {
@@ -304,10 +306,11 @@ func (s *Sender) processBatch(filePaths []string) error {
 	return nil
 }
 
-// selectOldestFromEachExporter picks the oldest file from each exporter directory
+// selectOldestFromEachExporter picks N oldest files from each exporter directory
 // This ensures all exporters are represented in each batch, preventing one exporter
 // from blocking others if it has a backlog
-func (s *Sender) selectOldestFromEachExporter(filePaths []string, maxBatch int) []string {
+// filesPerExporter: how many files to pick from each exporter
+func (s *Sender) selectOldestFromEachExporter(filePaths []string, filesPerExporter int) []string {
 	// Group files by exporter (directory name)
 	byExporter := make(map[string][]string)
 
@@ -319,17 +322,15 @@ func (s *Sender) selectOldestFromEachExporter(filePaths []string, maxBatch int) 
 		byExporter[exporterName] = append(byExporter[exporterName], filePath)
 	}
 
-	// Pick oldest file from each exporter (files are already sorted chronologically)
-	batch := make([]string, 0, len(byExporter))
+	// Pick N oldest files from each exporter (files are already sorted chronologically)
+	batch := make([]string, 0, len(byExporter)*filesPerExporter)
 	for _, files := range byExporter {
-		if len(files) > 0 {
-			batch = append(batch, files[0]) // First file is oldest
+		// Take up to filesPerExporter from this exporter
+		count := filesPerExporter
+		if count > len(files) {
+			count = len(files)
 		}
-	}
-
-	// Limit to maxBatch if needed
-	if len(batch) > maxBatch {
-		batch = batch[:maxBatch]
+		batch = append(batch, files[:count]...)
 	}
 
 	return batch
